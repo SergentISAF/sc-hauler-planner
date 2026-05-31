@@ -4,6 +4,16 @@ Single-file web app that automatically generates optimized transport plans for S
 
 > **Status:** Public alpha. Open for testing and feedback from the SC hauler community.
 
+## Two ways to use this
+
+**Option 1 — Self-host with your own API key (free, available now)**
+Clone the repo, double-click `index.html`, paste in your own Anthropic API key, parse away. The key stays in your browser and you're billed by Anthropic directly at cost (~$0.006 per screenshot, so $5 buys you roughly 800 parses). Full source is here for you to inspect, modify, or self-deploy. See [Getting an Anthropic API key](#getting-an-anthropic-api-key-3-minutes) below.
+
+**Option 2 — Use the hosted version with prepaid credits (coming soon)**
+If you don't want to mess with Anthropic accounts, you'll soon be able to go to [scrapwavesurvivor.com](https://scrapwavesurvivor.com), buy a pack of 200 credits for €5 (one credit = one screenshot parsed, no subscription, no expiry), and just use the app. Same code, same features, but the API key is on the server side so you don't have to set up anything. Works on phones and shared machines without exposing your key.
+
+Both modes are first-class. BYOK isn't going away — the hosted version exists for users who'd rather pay €5 once than register with Anthropic.
+
 ## Demo
 
 A 9-contract Hurston run with the RSI Hermes, starting at Everus Harbor.
@@ -28,15 +38,33 @@ A 9-contract Hurston run with the RSI Hermes, starting at Everus Harbor.
 - **Local storage** — checks survive a browser restart
 - **Smart error handling** — placeholder/template contracts (game bugs) are skipped automatically
 
-## Run it
+## Self-hosting it (Option 1)
 
-**Right now:** clone the repo (or download `index.html` directly) and double-click it. Toggle the **🔑 Bring your own key** tab, enter your Anthropic API key (stored locally in your browser, see guide below). Cost: ~$0.01–0.02 per screenshot.
+1. Clone the repo or [download `index.html` directly](https://raw.githubusercontent.com/SergentISAF/sc-hauler-planner/main/index.html) — that one file is the whole app.
+2. Double-click it. It opens in your default browser, no server, no install.
+3. Toggle the **🔑 Bring your own key** tab and paste your Anthropic API key (see guide below for how to get one).
+4. Drop in your contract screenshots and parse.
 
-**Coming soon — hosted version:** A no-setup hosted version is on the way at [scrapwavesurvivor.com](https://scrapwavesurvivor.com). Buy a pack of 200 credits for €5 (one credit = one contract screenshot parsed, no subscription, no expiry) and skip the Anthropic signup entirely. Useful if you want to use the tool on a phone, on a shared machine, or just want one less account to set up. BYOK remains free forever for power users who already have an Anthropic key.
+Your key is stored only in your browser's localStorage and sent directly to Anthropic. Cost: ~$0.006 per screenshot, billed to you by Anthropic.
+
+## The hosted version (Option 2)
+
+Sneak preview of the Credits tab at [scrapwavesurvivor.com](https://scrapwavesurvivor.com) (under construction):
 
 ![Hosted version Credits tab preview](screenshots/03-hosted-credits.png)
 
-For deploying your own hosted instance with Stripe credits, see [DEPLOY.md](DEPLOY.md).
+Same app, same features as the local file — only difference is the API key lives on the server, so you buy credits up-front instead of running your own Anthropic account. Useful for:
+
+- Using the tool on a phone or tablet
+- Using it on a shared/public machine without leaking your key
+- Skipping Anthropic signup entirely (one less account)
+- Supporting the project (~70% of the pack price funds further development)
+
+Ship date will be announced on the [r/starcitizen launch post](https://www.reddit.com/r/starcitizen/) once Stripe KYC clears.
+
+## Deploying your own hosted instance
+
+If you want to run your own Cloudflare-hosted instance with Stripe credits (e.g. for your org or a different audience), see [DEPLOY.md](DEPLOY.md) for the full guide.
 
 ## Getting an Anthropic API key (3 minutes)
 
