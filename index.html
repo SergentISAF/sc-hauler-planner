@@ -692,8 +692,82 @@ RULES:
   return JSON.parse(jsonMatch[0]);
 }
 
+// ========== STATION NAME NORMALIZATION ==========
+function normalizeWS(s) {
+  return (s || '').toString().trim().replace(/\s+/g, ' ');
+}
+
+function canonKey(s) {
+  return normalizeWS(s).toLowerCase().replace(/[^a-z0-9 ]/g, '');
+}
+
+function levenshtein(a, b) {
+  if (a === b) return 0;
+  if (!a.length) return b.length;
+  if (!b.length) return a.length;
+  const dp = Array.from({ length: a.length + 1 }, () => new Array(b.length + 1).fill(0));
+  for (let i = 0; i <= a.length; i++) dp[i][0] = i;
+  for (let j = 0; j <= b.length; j++) dp[0][j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i-1] === b[j-1] ? 0 : 1;
+      dp[i][j] = Math.min(dp[i-1][j] + 1, dp[i][j-1] + 1, dp[i-1][j-1] + cost);
+    }
+  }
+  return dp[a.length][b.length];
+}
+
+function similarStations(a, b) {
+  const x = canonKey(a);
+  const y = canonKey(b);
+  if (!x || !y) return false;
+  if (x === y) return true;
+  // Substring match (e.g. user types "Everus" -> matches "Everus Harbor")
+  if (x.length >= 4 && (x.includes(y) || y.includes(x))) return true;
+  // Typo tolerance (e.g. "Cassillo" vs "Cassilio") — only for longer names
+  const minLen = Math.min(x.length, y.length);
+  if (minLen >= 6 && levenshtein(x, y) <= 2) return true;
+  return false;
+}
+
+// Build aliases mapping: every observed name -> canonical (most specific) name.
+function buildStationAliases(contracts, startStation) {
+  const observed = new Set();
+  contracts.forEach(c => {
+    (c.deliveries || []).forEach(d => {
+      if (d.pickup) observed.add(normalizeWS(d.pickup));
+      if (d.delivery) observed.add(normalizeWS(d.delivery));
+    });
+  });
+  if (startStation) observed.add(normalizeWS(startStation));
+
+  const groups = []; // array of arrays
+  for (const name of observed) {
+    let placed = false;
+    for (const g of groups) {
+      if (g.some(member => similarStations(member, name))) {
+        g.push(name);
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) groups.push([name]);
+  }
+
+  const aliases = {};
+  for (const g of groups) {
+    // canonical = the longest name in the group (most specific)
+    const canonical = g.reduce((a, b) => a.length >= b.length ? a : b);
+    for (const name of g) aliases[name] = canonical;
+  }
+  return aliases;
+}
+
 // ========== ROUTE OPTIMIZER ==========
 function buildRoute(contracts, startStation, returnToStart) {
+  const aliases = buildStationAliases(contracts, startStation);
+  const resolve = name => aliases[normalizeWS(name)] || normalizeWS(name);
+
   // Flat list of every individual delivery (each gets a contract-index suffix for split contracts)
   const deliveries = [];
   contracts.forEach((c, ci) => {
@@ -704,17 +778,19 @@ function buildRoute(contracts, startStation, returnToStart) {
         reward: c.reward_auec,
         commodity: d.commodity,
         scu: d.scu,
-        pickup: d.pickup,
-        delivery: d.delivery,
+        pickup: resolve(d.pickup),
+        delivery: resolve(d.delivery),
         id: `c${ci}-d${di}`
       });
     });
   });
 
+  const canonicalStart = startStation ? resolve(startStation) : null;
+
   // Unique stations: collect all pickup + delivery stations
   const stationSet = new Set();
   deliveries.forEach(d => { stationSet.add(d.pickup); stationSet.add(d.delivery); });
-  if (startStation) stationSet.add(startStation);
+  if (canonicalStart) stationSet.add(canonicalStart);
   const stations = Array.from(stationSet);
 
   // For each station, what happens there
@@ -735,9 +811,9 @@ function buildRoute(contracts, startStation, returnToStart) {
   const visited = new Set();
 
   // Start station first (with whatever happens there — typically pickups)
-  if (startStation && stationSet.has(startStation)) {
-    route.push(startStation);
-    visited.add(startStation);
+  if (canonicalStart && stationSet.has(canonicalStart)) {
+    route.push(canonicalStart);
+    visited.add(canonicalStart);
   }
 
   // Phase 1: visit stations that have pickups (and may also have drops), but skip the final-destination-only stations
@@ -753,8 +829,8 @@ function buildRoute(contracts, startStation, returnToStart) {
   remaining.forEach(s => { route.push(s); visited.add(s); });
 
   // Optional return to start
-  if (returnToStart && startStation && route[route.length - 1] !== startStation) {
-    route.push(startStation + ' (return)');
+  if (returnToStart && canonicalStart && route[route.length - 1] !== canonicalStart) {
+    route.push(canonicalStart + ' (return)');
   }
 
   // Now build per-stop activity list, tracking cargo running total
