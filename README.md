@@ -30,9 +30,11 @@ A 9-contract Hurston run with the RSI Hermes, starting at Everus Harbor.
 
 ## Run it
 
-**Hosted version:** [scrapwavesurvivor.com](https://scrapwavesurvivor.com) — buy 200 credits for €5 (~10 contract runs), or bring your own Anthropic API key for unlimited usage at cost.
+**Right now:** clone the repo (or download `index.html` directly) and double-click it. Toggle the **🔑 Bring your own key** tab, enter your Anthropic API key (stored locally in your browser, see guide below). Cost: ~$0.01–0.02 per screenshot.
 
-**Self-host / local:** Clone the repo and double-click `index.html`. Toggle the **🔑 Bring your own key** tab, enter your Anthropic API key (stored locally in your browser, see guide below). Cost: ~$0.01–0.02 per screenshot.
+**Coming soon — hosted version:** A no-setup hosted version is on the way at [scrapwavesurvivor.com](https://scrapwavesurvivor.com). Buy a pack of 200 credits for €5 (one credit = one contract screenshot parsed, no subscription, no expiry) and skip the Anthropic signup entirely. Useful if you want to use the tool on a phone, on a shared machine, or just want one less account to set up. BYOK remains free forever for power users who already have an Anthropic key.
+
+![Hosted version Credits tab preview](screenshots/03-hosted-credits.png)
 
 For deploying your own hosted instance with Stripe credits, see [DEPLOY.md](DEPLOY.md).
 
