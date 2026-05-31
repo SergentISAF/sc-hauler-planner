@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SC Hauler Planner</title>
+<style>
+  :root {
+    --bg: #0a1420;
+    --bg-panel: #122033;
+    --bg-step: #1a2b42;
+    --border: #2a4a6e;
+    --accent: #4FC3F7;
+    --accent-dim: #2a7da6;
+    --text: #e8eef5;
+    --text-dim: #8aa0b8;
+    --done: #4caf50;
+    --done-bg: #1f3a2a;
+    --warn: #ff9800;
+    --err: #f44336;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 20px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', Tahoma, sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
+  }
+  h1 { color: var(--accent); border-bottom: 2px solid var(--accent); padding-bottom: 8px; margin-top: 0; }
+  h2 { color: var(--accent); margin-top: 30px; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+  h3 { color: var(--accent); margin-bottom: 6px; }
+  .station { color: var(--accent); font-weight: bold; }
+  .scu { color: var(--warn); font-weight: bold; }
+
+  .panel {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin-bottom: 16px;
+  }
+
+  label.field { display: block; margin: 10px 0; }
+  label.field span.lbl { display: block; color: var(--text-dim); font-size: 13px; margin-bottom: 4px; }
+  input[type="text"], input[type="password"], select {
+    width: 100%;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px 10px;
+    font-size: 14px;
+  }
+  button {
+    background: var(--accent-dim);
+    color: white;
+    border: none;
+    padding: 10px 18px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: bold;
+  }
+  button:hover:not(:disabled) { background: var(--accent); }
+  button:disabled { background: #333; cursor: not-allowed; opacity: 0.6; }
+  button.secondary { background: #555; }
+  button.danger { background: #6a2a2a; }
+  button.danger:hover { background: #a03a3a; }
+
+  .dropzone {
+    border: 2px dashed var(--border);
+    border-radius: 8px;
+    padding: 40px;
+    text-align: center;
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: all 0.2s;
+    background: var(--bg);
+  }
+  .dropzone.dragover { border-color: var(--accent); background: rgba(79,195,247,0.1); color: var(--accent); }
+  .dropzone input[type="file"] { display: none; }
+
+  .thumbs {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 10px;
+    margin-top: 14px;
+  }
+  .thumb {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px;
+    position: relative;
+    font-size: 11px;
+  }
+  .thumb img { width: 100%; height: 80px; object-fit: cover; border-radius: 3px; display: block; }
+  .thumb .status { padding: 4px 0 0; color: var(--text-dim); }
+  .thumb .status.parsing { color: var(--accent); }
+  .thumb .status.ok { color: var(--done); }
+  .thumb .status.err { color: var(--err); }
+  .thumb .remove {
+    position: absolute; top: 4px; right: 4px;
+    background: rgba(0,0,0,0.7); color: white;
+    border-radius: 50%; width: 22px; height: 22px;
+    border: none; cursor: pointer; font-size: 14px; line-height: 1;
+  }
+
+  .log {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 10px;
+    margin-top: 12px;
+    max-height: 200px;
+    overflow-y: auto;
+    font-family: 'Consolas', monospace;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  .log-line { padding: 2px 0; }
+  .log-line.err { color: var(--err); }
+  .log-line.ok { color: var(--done); }
+  .log-line.info { color: var(--accent); }
+
+  .topbar {
+    display: flex; justify-content: space-between; align-items: center;
+    background: var(--bg-panel); border: 1px solid var(--border);
+    border-radius: 8px; padding: 12px 18px; margin-bottom: 20px;
+    flex-wrap: wrap; gap: 12px;
+  }
+  .stat strong { color: var(--accent); font-size: 18px; }
+
+  .step { background: var(--bg-step); border: 1px solid var(--border); border-radius: 8px; padding: 16px 20px; margin-bottom: 16px; }
+  .step-title { font-size: 18px; font-weight: bold; color: var(--accent); margin-bottom: 4px; }
+  .step-meta { color: var(--text-dim); font-size: 13px; margin-bottom: 12px; }
+  .action-group { margin: 12px 0; }
+  .action-group-title { color: var(--text-dim); text-transform: uppercase; font-size: 12px; letter-spacing: 1px; margin-bottom: 6px; }
+  .check-item {
+    display: flex; align-items: center; padding: 8px 10px; margin: 4px 0;
+    background: var(--bg-panel); border: 1px solid var(--border); border-radius: 4px;
+    cursor: pointer; user-select: none; transition: background 0.15s, opacity 0.15s;
+  }
+  .check-item:hover { background: #1a2d44; }
+  .check-item.done { background: var(--done-bg); border-color: var(--done); opacity: 0.65; }
+  .check-item.done .label { text-decoration: line-through; color: var(--text-dim); }
+  .check-item input { margin-right: 12px; transform: scale(1.3); cursor: pointer; }
+  .label { flex: 1; }
+  .tag { display: inline-block; padding: 2px 6px; border-radius: 3px; font-size: 11px; font-weight: bold; margin-right: 6px; }
+  .tag.pickup { background: #2a5a8a; color: white; }
+  .tag.drop { background: #8a5a2a; color: white; }
+  .tag.contract { background: #555; color: white; }
+
+  .station-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .station-card { background: var(--bg-panel); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 6px; padding: 12px 16px; }
+  .station-head { font-size: 16px; font-weight: bold; margin-bottom: 8px; }
+  .station-tag { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 11px; margin-left: 6px; }
+  .station-tag.start { background: #2e6e3a; color: white; }
+  .station-tag.slut { background: #6e3a2e; color: white; }
+  .line { font-size: 13px; padding: 6px 8px; border-radius: 3px; margin: 4px 0; }
+  .pickup-line { background: rgba(42,90,138,0.25); border-left: 3px solid #2a5a8a; }
+  .drop-line { background: rgba(138,90,42,0.25); border-left: 3px solid #8a5a2a; }
+  .pickup-line strong { color: #6fb6e8; }
+  .drop-line strong { color: #e8a86f; }
+  .totals { font-size: 12px; color: var(--text-dim); margin-top: 6px; text-align: right; }
+
+  .contract-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #1a2b42; }
+  .contract-row:last-child { border-bottom: none; }
+  .contract-row.done .contract-name { color: var(--done); }
+  .badge { padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: bold; }
+  .badge.pending { background: #555; color: white; }
+  .badge.done { background: var(--done); color: white; }
+
+  .hermes-card { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px 20px; margin-bottom: 20px; }
+  .hermes-info { font-size: 14px; color: var(--text-dim); padding-bottom: 10px; border-bottom: 1px solid var(--border); margin-bottom: 10px; }
+  .hermes-info strong { color: var(--accent); }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; padding: 10px; font-size: 12px; color: var(--text-dim); }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-dot { display: inline-block; width: 12px; height: 12px; border-radius: 2px; }
+
+  .warn-box { background: rgba(255,152,0,0.15); border-left: 4px solid var(--warn); padding: 10px 14px; margin: 10px 0; font-size: 14px; }
+  .info-box { background: rgba(79,195,247,0.08); border-left: 4px solid var(--accent); padding: 10px 14px; margin: 10px 0; font-size: 14px; }
+  .err-box { background: rgba(244,67,54,0.15); border-left: 4px solid var(--err); padding: 10px 14px; margin: 10px 0; font-size: 14px; }
+</style>
+</head>
+<body>
+
+<h1>🚀 SC Hauler Planner</h1>
+
+<div class="panel" id="setup-panel">
+  <h3 style="margin-top:0">⚙️ Setup</h3>
+
+  <label class="field">
+    <span class="lbl">Claude API Key (stored locally in your browser)</span>
+    <input type="password" id="api-key" placeholder="sk-ant-...">
+  </label>
+
+  <label class="field">
+    <span class="lbl">Ship</span>
+    <select id="ship-select"></select>
+  </label>
+
+  <label class="field">
+    <span class="lbl">Starting station (where you are right now)</span>
+    <input type="text" id="start-station" placeholder="e.g. Everus Harbor, Port Olisar, ARC-L1...">
+  </label>
+
+  <label class="field" style="display:flex;align-items:center;gap:8px">
+    <input type="checkbox" id="return-to-start" style="width:auto;margin:0;transform:scale(1.2)">
+    <span style="color:var(--text-dim);font-size:13px">Return to starting station at the end (only if no contracts deliver there)</span>
+  </label>
+</div>
+
+<div class="panel">
+  <h3 style="margin-top:0">📸 Drop contract screenshots here</h3>
+  <label class="dropzone" id="dropzone">
+    <input type="file" id="file-input" multiple accept="image/*">
+    <div style="font-size:40px;margin-bottom:8px">📥</div>
+    <div><strong>Drag images here</strong> or click to select</div>
+    <div style="font-size:12px;margin-top:8px">PNG/JPG. One contract screen per image.</div>
+  </label>
+  <div class="thumbs" id="thumbs"></div>
+
+  <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">
+    <button id="parse-btn" disabled>🔍 Parse images with Claude</button>
+    <button id="generate-btn" class="secondary" disabled>🗺️ Generate transport plan</button>
+    <button id="clear-btn" class="danger">🗑️ Clear all</button>
+  </div>
+
+  <div class="log" id="log" style="display:none"></div>
+</div>
+
+<div id="plan-output"></div>
+
+<script>
+// ========== SHIP DATABASE ==========
+const SHIPS = {
+  'hermes':              { name: 'RSI Hermes',           scu: 288,  grids: 2, gridSize: 144, maxContainer: 32, notes: '2× mirrored 144 SCU grids' },
+  'cutlass-black':       { name: 'Drake Cutlass Black',  scu: 46,   grids: 1, maxContainer: 8 },
+  'freelancer':          { name: 'MISC Freelancer',      scu: 66,   grids: 1, maxContainer: 16 },
+  'freelancer-max':      { name: 'MISC Freelancer MAX',  scu: 120,  grids: 1, maxContainer: 16 },
+  'msr':                 { name: 'MISC Mercury Star Runner', scu: 114, grids: 1, maxContainer: 16 },
+  'constellation-taurus':{ name: 'RSI Constellation Taurus', scu: 174, grids: 1, maxContainer: 24 },
+  'corsair':             { name: 'Drake Corsair',        scu: 72,   grids: 1, maxContainer: 16 },
+  'c1-spirit':           { name: 'Crusader C1 Spirit',   scu: 64,   grids: 1, maxContainer: 16 },
+  'c2-hercules':         { name: 'Crusader C2 Hercules', scu: 696,  grids: 1, maxContainer: 32, notes: 'Large heavy hauler' },
+  'm2-hercules':         { name: 'Crusader M2 Hercules', scu: 600,  grids: 1, maxContainer: 32 },
+  'caterpillar':         { name: 'Drake Caterpillar',    scu: 576,  grids: 5, gridSize: 115, maxContainer: 32, notes: '5 separate modules' },
+  'hull-a':              { name: 'MISC Hull A',          scu: 64,   grids: 1, maxContainer: 24, notes: 'External spindle cargo' },
+  'hull-b':              { name: 'MISC Hull B',          scu: 384,  grids: 1, maxContainer: 32, notes: 'External spindle cargo' },
+  'hull-c':              { name: 'MISC Hull C',          scu: 4608, grids: 1, maxContainer: 32, notes: 'Massive external hauler' },
+  'argo-raft':           { name: 'Argo RAFT',            scu: 96,   grids: 1, maxContainer: 32 },
+  'starlancer-max':      { name: 'MISC Starlancer MAX',  scu: 192,  grids: 1, maxContainer: 32 },
+  'starlancer-tac':      { name: 'MISC Starlancer TAC',  scu: 116,  grids: 1, maxContainer: 24 },
+};
+
+// ========== STATE ==========
+let images = []; // {id, file, dataUrl, status, parsed}
+let contracts = []; // parsed contract objects
+let logEl, planEl;
+
+const STORAGE = {
+  apiKey: 'sc-tp-api-key',
+  ship: 'sc-tp-ship',
+  start: 'sc-tp-start',
+  returnToStart: 'sc-tp-return',
+  checks: 'sc-tp-checks-v2',
+};
+
+// ========== UI SETUP ==========
+function initUI() {
+  logEl = document.getElementById('log');
+  planEl = document.getElementById('plan-output');
+
+  const shipSel = document.getElementById('ship-select');
+  for (const [id, s] of Object.entries(SHIPS)) {
+    const opt = document.createElement('option');
+    opt.value = id;
+    opt.textContent = `${s.name} (${s.scu} SCU${s.grids > 1 ? ', ' + s.grids + ' grids' : ''})`;
+    shipSel.appendChild(opt);
+  }
+
+  document.getElementById('api-key').value = localStorage.getItem(STORAGE.apiKey) || '';
+  shipSel.value = localStorage.getItem(STORAGE.ship) || 'hermes';
+  document.getElementById('start-station').value = localStorage.getItem(STORAGE.start) || '';
+  document.getElementById('return-to-start').checked = localStorage.getItem(STORAGE.returnToStart) === 'true';
+
+  document.getElementById('api-key').addEventListener('change', e => localStorage.setItem(STORAGE.apiKey, e.target.value));
+  shipSel.addEventListener('change', e => localStorage.setItem(STORAGE.ship, e.target.value));
+  document.getElementById('start-station').addEventListener('change', e => localStorage.setItem(STORAGE.start, e.target.value));
+  document.getElementById('return-to-start').addEventListener('change', e => localStorage.setItem(STORAGE.returnToStart, e.target.checked));
+
+  setupDropzone();
+  document.getElementById('parse-btn').addEventListener('click', parseAll);
+  document.getElementById('generate-btn').addEventListener('click', generatePlan);
+  document.getElementById('clear-btn').addEventListener('click', clearAll);
+}
+
+function setupDropzone() {
+  const dz = document.getElementById('dropzone');
+  const fi = document.getElementById('file-input');
+
+  dz.addEventListener('click', () => fi.click());
+  fi.addEventListener('change', e => addFiles(Array.from(e.target.files)));
+
+  ['dragenter','dragover'].forEach(ev => dz.addEventListener(ev, e => {
+    e.preventDefault(); e.stopPropagation(); dz.classList.add('dragover');
+  }));
+  ['dragleave','drop'].forEach(ev => dz.addEventListener(ev, e => {
+    e.preventDefault(); e.stopPropagation(); dz.classList.remove('dragover');
+  }));
+  dz.addEventListener('drop', e => {
+    const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+    addFiles(files);
+  });
+}
+
+function addFiles(files) {
+  files.forEach(f => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const id = 'img-' + Date.now() + '-' + Math.random().toString(36).slice(2,7);
+      images.push({ id, file: f, dataUrl: e.target.result, status: 'pending', parsed: null });
+      renderThumbs();
+      updateButtons();
+    };
+    reader.readAsDataURL(f);
+  });
+}
+
+function renderThumbs() {
+  const c = document.getElementById('thumbs');
+  c.innerHTML = '';
+  images.forEach(img => {
+    const div = document.createElement('div');
+    div.className = 'thumb';
+    div.innerHTML = `
+      <button class="remove" data-id="${img.id}">×</button>
+      <img src="${img.dataUrl}" alt="">
+      <div class="status ${img.status}">${statusLabel(img)}</div>
+    `;
+    c.appendChild(div);
+  });
+  c.querySelectorAll('.remove').forEach(b => b.addEventListener('click', e => {
+    const id = e.target.dataset.id;
+    images = images.filter(i => i.id !== id);
+    renderThumbs();
+    updateButtons();
+  }));
+}
+
+function statusLabel(img) {
+  if (img.status === 'pending') return 'waiting';
+  if (img.status === 'parsing') return 'reading...';
+  if (img.status === 'ok') {
+    const p = img.parsed;
+    if (!p.valid) return '⚠ ' + (p.reason || 'invalid');
+    const d = p.deliveries || [];
+    return '✓ ' + d.length + ' delivery' + (d.length > 1 ? 's' : '');
+  }
+  if (img.status === 'err') return '✗ error';
+  return img.status;
+}
+
+function updateButtons() {
+  document.getElementById('parse-btn').disabled = images.length === 0 || !document.getElementById('api-key').value;
+  document.getElementById('generate-btn').disabled = contracts.length === 0;
+}
+
+function log(msg, kind='') {
+  logEl.style.display = 'block';
+  const line = document.createElement('div');
+  line.className = 'log-line ' + kind;
+  line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  logEl.appendChild(line);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+// ========== CLAUDE API ==========
+async function parseAll() {
+  const apiKey = document.getElementById('api-key').value.trim();
+  if (!apiKey) { alert('Enter Claude API key first'); return; }
+
+  contracts = [];
+  log(`Starting parse of ${images.length} image(s)...`, 'info');
+
+  for (const img of images) {
+    if (img.status === 'ok' && img.parsed?.valid) {
+      contracts.push(img.parsed);
+      continue;
+    }
+    img.status = 'parsing';
+    renderThumbs();
+    try {
+      const result = await callClaude(apiKey, img.dataUrl, img.file.type);
+      img.parsed = result;
+      img.status = 'ok';
+      if (result.valid) {
+        contracts.push(result);
+        log(`✓ ${img.file.name}: ${result.title || 'contract'} — ${result.deliveries?.length || 0} delivery`, 'ok');
+      } else {
+        log(`⚠ ${img.file.name}: ${result.reason || 'invalid'}`, '');
+      }
+    } catch (err) {
+      img.status = 'err';
+      img.parsed = { valid: false, reason: err.message };
+      log(`✗ ${img.file.name}: ${err.message}`, 'err');
+    }
+    renderThumbs();
+  }
+  log(`Done. ${contracts.length} valid contracts ready.`, 'info');
+  updateButtons();
+}
+
+async function callClaude(apiKey, dataUrl, mediaType) {
+  const base64 = dataUrl.split(',')[1];
+  const prompt = `You are a Star Citizen contract parser. Read this contract screen and return ONLY valid JSON (no markdown, no explanation) in exactly this format:
+
+{
+  "valid": true/false,
+  "reason": "short reason if valid=false (e.g. 'placeholder text', 'not a contract screen')",
+  "title": "the contract's title",
+  "reward_auec": <integer, e.g. 53750>,
+  "contractor": "e.g. Covalex or Red Wind Linehaul",
+  "deliveries": [
+    {
+      "commodity": "e.g. Tungsten",
+      "scu": <integer>,
+      "pickup": "pickup station name (shown in blue text in the contract)",
+      "delivery": "delivery station name (also blue)"
+    }
+  ]
+}
+
+RULES:
+- One entry in "deliveries" per unique delivery destination. If the contract splits the same commodity across 2 stations (e.g. 3 SCU to station A + 3 SCU to station B), return 2 entries.
+- Pickup and delivery are stations written in blue text in the objectives.
+- Read SCU numbers from Primary Objectives: "Deliver 0/X SCU of [commodity] to [station]" → scu=X.
+- If Primary Objectives contains template text like "amount/total SCU of item" or "[item]", the contract is invalid: valid=false, reason="placeholder text".
+- If the image is not a contract screen: valid=false, reason="not a contract screen".
+- Station names MUST be precise (e.g. "HDPC-Farneseway", "Everus Harbor", "Sakura Sun Magnolia Workcenter").`;
+
+  const body = {
+    model: 'claude-sonnet-4-6',
+    max_tokens: 1024,
+    messages: [{
+      role: 'user',
+      content: [
+        { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
+        { type: 'text', text: prompt }
+      ]
+    }]
+  };
+
+  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+      'content-type': 'application/json'
+    },
+    body: JSON.stringify(body)
+  });
+
+  if (!resp.ok) {
+    const errText = await resp.text();
+    throw new Error(`API ${resp.status}: ${errText.slice(0,200)}`);
+  }
+  const data = await resp.json();
+  const text = data.content?.[0]?.text || '';
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error('No JSON found in Claude response');
+  return JSON.parse(jsonMatch[0]);
+}
+
+// ========== ROUTE OPTIMIZER ==========
+function buildRoute(contracts, startStation, returnToStart) {
+  // Flat list of every individual delivery (each gets a contract-index suffix for split contracts)
+  const deliveries = [];
+  contracts.forEach((c, ci) => {
+    (c.deliveries || []).forEach((d, di) => {
+      deliveries.push({
+        contractIdx: ci,
+        contractTitle: c.title || `Contract ${ci+1}`,
+        reward: c.reward_auec,
+        commodity: d.commodity,
+        scu: d.scu,
+        pickup: d.pickup,
+        delivery: d.delivery,
+        id: `c${ci}-d${di}`
+      });
+    });
+  });
+
+  // Unique stations: collect all pickup + delivery stations
+  const stationSet = new Set();
+  deliveries.forEach(d => { stationSet.add(d.pickup); stationSet.add(d.delivery); });
+  if (startStation) stationSet.add(startStation);
+  const stations = Array.from(stationSet);
+
+  // For each station, what happens there
+  // We'll do a simple greedy: must START at startStation; visit each station once;
+  // pickups must come before their delivery.
+  // Heuristic: visit pickup-stations first (in some order), then delivery-only stations.
+  // Stations that are BOTH pickup and delivery for different contracts come in middle.
+
+  const stationRoles = {};
+  stations.forEach(s => stationRoles[s] = { pickups: [], drops: [] });
+  deliveries.forEach(d => {
+    stationRoles[d.pickup].pickups.push(d);
+    stationRoles[d.delivery].drops.push(d);
+  });
+
+  // Build ordered route
+  const route = [];
+  const visited = new Set();
+
+  // Start station first (with whatever happens there — typically pickups)
+  if (startStation && stationSet.has(startStation)) {
+    route.push(startStation);
+    visited.add(startStation);
+  }
+
+  // Phase 1: visit stations that have pickups (and may also have drops), but skip the final-destination-only stations
+  // Simpler approach: visit stations in order: pickup-heavy → mixed → drop-only
+  const remaining = stations.filter(s => !visited.has(s));
+  // Score: stations with more pickups go earlier
+  remaining.sort((a, b) => {
+    const ra = stationRoles[a], rb = stationRoles[b];
+    const aPickupRatio = ra.pickups.length / Math.max(1, ra.pickups.length + ra.drops.length);
+    const bPickupRatio = rb.pickups.length / Math.max(1, rb.pickups.length + rb.drops.length);
+    return bPickupRatio - aPickupRatio; // more pickups first
+  });
+  remaining.forEach(s => { route.push(s); visited.add(s); });
+
+  // Optional return to start
+  if (returnToStart && startStation && route[route.length - 1] !== startStation) {
+    route.push(startStation + ' (return)');
+  }
+
+  // Now build per-stop activity list, tracking cargo running total
+  const stops = [];
+  let cargo = 0;
+  const droppedSet = new Set();
+
+  route.forEach((stationName, idx) => {
+    const realStation = stationName.replace(' (return)', '');
+    const role = stationRoles[realStation] || { pickups: [], drops: [] };
+
+    // Drops: only those NOT already dropped, AND where pickup already happened (i.e., pickup station appears earlier in route)
+    const dropsHere = role.drops.filter(d => {
+      if (droppedSet.has(d.id)) return false;
+      const pickupIdx = route.findIndex(s => s.replace(' (return)','') === d.pickup);
+      return pickupIdx >= 0 && pickupIdx < idx;
+    });
+    // Pickups: only those NOT already picked up (mark them as we go)
+    const pickupsHere = role.pickups.filter(d => {
+      const alreadyDroppedOrPickedUp = stops.some(s => s.pickups.some(p => p.id === d.id));
+      return !alreadyDroppedOrPickedUp;
+    });
+
+    const dropSCU = dropsHere.reduce((a,b) => a + b.scu, 0);
+    const pickupSCU = pickupsHere.reduce((a,b) => a + b.scu, 0);
+    cargo = cargo - dropSCU + pickupSCU;
+
+    dropsHere.forEach(d => droppedSet.add(d.id));
+
+    stops.push({
+      station: stationName,
+      pickups: pickupsHere,
+      drops: dropsHere,
+      cargoAfter: cargo,
+      isStart: idx === 0,
+      isEnd: idx === route.length - 1,
+    });
+  });
+
+  const peakCargo = Math.max(...stops.map(s => s.cargoAfter));
+  return { stops, peakCargo, deliveries, contracts };
+}
+
+// ========== PLAN RENDERER ==========
+function generatePlan() {
+  const startStation = document.getElementById('start-station').value.trim();
+  if (!startStation) { alert('Enter starting station first'); return; }
+  const shipId = document.getElementById('ship-select').value;
+  const ship = SHIPS[shipId];
+  const returnToStart = document.getElementById('return-to-start').checked;
+
+  const plan = buildRoute(contracts, startStation, returnToStart);
+  renderPlan(plan, ship);
+  window.scrollTo({ top: planEl.offsetTop - 20, behavior: 'smooth' });
+}
+
+function renderPlan(plan, ship) {
+  const { stops, peakCargo, deliveries, contracts } = plan;
+  const totalReward = contracts.reduce((a, c) => a + (c.reward_auec || 0), 0);
+  const totalChecks = stops.reduce((a, s) => a + s.pickups.length + s.drops.length, 0);
+  const cargoWarn = peakCargo > ship.scu;
+
+  let html = `<h1>🗺️ Generated Transport Plan</h1>`;
+
+  html += `<div class="topbar">
+    <div class="stat">Progress: <strong id="progress-stat">0 / ${totalChecks}</strong></div>
+    <div class="stat">Closed contracts: <strong id="contracts-done-stat">0 / ${contracts.length}</strong></div>
+    <div class="stat">Earned: <strong id="reward-stat">0</strong> / ${totalReward.toLocaleString('en-US')} aUEC</div>
+    <button class="danger" onclick="resetChecks()">Reset checks</button>
+  </div>`;
+
+  html += `<div class="${cargoWarn ? 'err-box' : 'info-box'}">
+    <strong>${ship.name}</strong> — capacity ${ship.scu} SCU.
+    Peak load: <span class="scu">${peakCargo} SCU</span> (${Math.round(peakCargo/ship.scu*100)}%).
+    ${cargoWarn ? '⚠ WARNING: Peak load exceeds ship capacity — split into 2 trips or switch ship.' : '✓ Fits in the ship.'}
+    ${ship.notes ? '<br><small>' + ship.notes + '</small>' : ''}
+  </div>`;
+
+  // Contract status
+  html += `<div class="panel"><h3 style="margin-top:0">Contract status</h3><div id="contract-list"></div></div>`;
+
+  // Station summary
+  html += `<h2>🗺️ Station overview</h2><div class="station-summary">`;
+  stops.forEach((stop, i) => {
+    const tag = stop.isStart ? '<span class="station-tag start">START</span>' : (stop.isEnd && returnToStartCheck() ? '<span class="station-tag slut">END</span>' : '');
+    html += `<div class="station-card">
+      <div class="station-head">${i+1}. <span class="station">${stop.station}</span> ${tag}</div>
+      <div class="station-body">`;
+    if (stop.drops.length) {
+      html += `<div class="line drop-line"><strong>UNLOAD:</strong> ${stop.drops.map(d => `${d.commodity} ${d.scu} SCU`).join(' · ')}</div>`;
+    }
+    if (stop.pickups.length) {
+      html += `<div class="line pickup-line"><strong>PICK UP:</strong> ${stop.pickups.map(d => `${d.commodity} ${d.scu} SCU → ${d.delivery}`).join(' · ')}</div>`;
+    }
+    html += `<div class="totals">Cargo after: <span class="scu">${stop.cargoAfter} SCU</span></div>`;
+    html += `</div></div>`;
+  });
+  html += `</div>`;
+
+  // Loading note
+  html += `<div class="info-box"><strong>📦 LIFO loading:</strong> The delivery order below follows LIFO — pack first (at the bottom) what's delivered LAST. Pack last (on top) what's delivered FIRST.${ship.grids > 1 ? ` The ${ship.name} has ${ship.grids} cargo grids — use one for local deliveries and one for return cargo to avoid rearranging mid-trip.` : ''}</div>`;
+
+  // Step-by-step with checkboxes
+  html += `<h2>📍 Step-by-step</h2>`;
+  let stepNum = 0;
+  stops.forEach(stop => {
+    if (stop.drops.length === 0 && stop.pickups.length === 0) return;
+    stepNum++;
+    html += `<div class="step">
+      <div class="step-title">Step ${stepNum} — ${stop.station}</div>
+      <div class="step-meta">Cargo after: <span class="scu">${stop.cargoAfter} SCU</span> ${stop.cargoAfter === peakCargo ? '(PEAK)' : ''}</div>`;
+
+    if (stop.drops.length) {
+      html += `<div class="action-group"><div class="action-group-title">Deliveries</div>`;
+      stop.drops.forEach(d => {
+        html += `<label class="check-item" data-id="d-${d.id}">
+          <input type="checkbox">
+          <span class="label"><span class="tag drop">DROP</span><span class="tag contract">C${d.contractIdx+1}</span>${d.commodity} — <span class="scu">${d.scu} SCU</span></span>
+        </label>`;
+      });
+      html += `</div>`;
+    }
+    if (stop.pickups.length) {
+      html += `<div class="action-group"><div class="action-group-title">Pick up</div>`;
+      stop.pickups.forEach(d => {
+        html += `<label class="check-item" data-id="p-${d.id}">
+          <input type="checkbox">
+          <span class="label"><span class="tag pickup">PICKUP</span><span class="tag contract">C${d.contractIdx+1}</span>${d.commodity} — <span class="scu">${d.scu} SCU</span> → ${d.delivery}</span>
+        </label>`;
+      });
+      html += `</div>`;
+    }
+    html += `</div>`;
+  });
+
+  planEl.innerHTML = html;
+
+  // Wire up checkboxes + persistence
+  window._plan = plan;
+  attachCheckHandlers();
+  renderContractStatus();
+  loadChecks();
+}
+
+function returnToStartCheck() {
+  return document.getElementById('return-to-start').checked;
+}
+
+function attachCheckHandlers() {
+  document.querySelectorAll('.check-item').forEach(item => {
+    item.addEventListener('change', () => {
+      const state = JSON.parse(localStorage.getItem(STORAGE.checks) || '{}');
+      state[item.dataset.id] = item.querySelector('input').checked;
+      localStorage.setItem(STORAGE.checks, JSON.stringify(state));
+      refreshState();
+    });
+  });
+}
+
+function loadChecks() {
+  const state = JSON.parse(localStorage.getItem(STORAGE.checks) || '{}');
+  document.querySelectorAll('.check-item').forEach(item => {
+    const cb = item.querySelector('input');
+    cb.checked = !!state[item.dataset.id];
+    item.classList.toggle('done', cb.checked);
+  });
+  refreshState();
+}
+
+function refreshState() {
+  const state = JSON.parse(localStorage.getItem(STORAGE.checks) || '{}');
+  let done = 0, total = 0;
+  document.querySelectorAll('.check-item').forEach(item => {
+    total++;
+    const checked = !!state[item.dataset.id];
+    item.classList.toggle('done', checked);
+    if (checked) done++;
+  });
+  document.getElementById('progress-stat').textContent = `${done} / ${total}`;
+  renderContractStatus();
+}
+
+function renderContractStatus() {
+  const plan = window._plan;
+  if (!plan) return;
+  const state = JSON.parse(localStorage.getItem(STORAGE.checks) || '{}');
+  const list = document.getElementById('contract-list');
+  let cDone = 0, rewardDone = 0;
+  list.innerHTML = '';
+  plan.contracts.forEach((c, ci) => {
+    const myDeliveries = plan.deliveries.filter(d => d.contractIdx === ci);
+    const allDone = myDeliveries.every(d => state[`d-${d.id}`]);
+    if (allDone) { cDone++; rewardDone += (c.reward_auec || 0); }
+    const row = document.createElement('div');
+    row.className = 'contract-row' + (allDone ? ' done' : '');
+    row.innerHTML = `
+      <span class="contract-name">C${ci+1}: ${c.title || 'contract'}</span>
+      <span>
+        <span style="margin-right:10px;color:var(--text-dim)">${(c.reward_auec||0).toLocaleString('en-US')} aUEC</span>
+        <span class="badge ${allDone ? 'done' : 'pending'}">${allDone ? 'CLOSED' : 'In progress'}</span>
+      </span>
+    `;
+    list.appendChild(row);
+  });
+  document.getElementById('contracts-done-stat').textContent = `${cDone} / ${plan.contracts.length}`;
+  document.getElementById('reward-stat').textContent = rewardDone.toLocaleString('en-US');
+}
+
+function resetChecks() {
+  if (!confirm('Reset all checks?')) return;
+  localStorage.removeItem(STORAGE.checks);
+  loadChecks();
+}
+
+function clearAll() {
+  if (!confirm('Clear all images, parsed contracts and checks?')) return;
+  images = [];
+  contracts = [];
+  localStorage.removeItem(STORAGE.checks);
+  renderThumbs();
+  updateButtons();
+  planEl.innerHTML = '';
+  logEl.style.display = 'none';
+  logEl.innerHTML = '';
+}
+
+initUI();
+</script>
+
+</body>
+</html>

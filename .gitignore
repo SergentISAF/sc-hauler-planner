@@ -1,0 +1,21 @@
+# Local notes / scratch
+*.local.*
+notes/
+scratch/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*~
+
+# Secrets (just in case)
+.env
+.env.local
+*.key
+api-keys.txt
