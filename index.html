@@ -263,7 +263,20 @@
       <span class="lbl">Claude API Key (stored locally in your browser)</span>
       <input type="password" id="api-key" placeholder="sk-ant-...">
     </label>
-    <p class="hint">Bring your own Anthropic API key from <a href="https://console.anthropic.com/" target="_blank" style="color:var(--accent)">console.anthropic.com</a>. Cost: ~$0.01 per parse, billed to you directly. Unlimited usage.</p>
+    <p class="hint">Bring your own Anthropic API key. Cost: ~$0.01 per parse, billed to you directly. Unlimited usage.</p>
+    <details style="margin-top:10px">
+      <summary style="cursor:pointer;color:var(--accent);font-size:13px">How to get an API key (3 minutes)</summary>
+      <ol style="font-size:13px;color:var(--text-dim);padding-left:20px;margin-top:8px;line-height:1.6">
+        <li>Go to <a href="https://console.anthropic.com/" target="_blank" style="color:var(--accent)">console.anthropic.com</a> and sign up (email, Google or GitHub).</li>
+        <li>Verify your email when the confirmation lands.</li>
+        <li>Click <strong>Billing</strong> in the left sidebar and add a payment method.</li>
+        <li>Top up your account with <strong>$5–10</strong> in credits (that's roughly 500–1000 parses).</li>
+        <li>Go to <strong>API Keys</strong> in the sidebar and click <strong>Create Key</strong>. Give it a name like "hauler".</li>
+        <li>Copy the key (starts with <code style="background:var(--bg);padding:2px 4px;border-radius:3px">sk-ant-</code>) — you can only see it once, so save it somewhere.</li>
+        <li>Paste it in the field above. The key is stored only in your browser's localStorage and is sent directly to Anthropic, never to me.</li>
+      </ol>
+      <p style="font-size:12px;color:var(--text-dim);margin-top:8px">⚠️ Don't share your key publicly. If you ever paste it on a shared/public machine, revoke it from the console afterwards.</p>
+    </details>
   </div>
 
   <label class="field">

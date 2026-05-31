@@ -34,9 +34,25 @@ Station overview and step-by-step checklist with tick-as-you-go pickups and deli
 
 **Hosted version:** [scrapwavesurvivor.com](https://scrapwavesurvivor.com) — buy 200 credits for €5 (~10 contract runs), or bring your own Anthropic API key for unlimited usage at cost.
 
-**Self-host / local:** Clone the repo and double-click `index.html`. Toggle the **🔑 Bring your own key** tab, enter your Anthropic API key (stored locally in your browser, grab one at [console.anthropic.com](https://console.anthropic.com/)). Cost: ~$0.01–0.02 per screenshot.
+**Self-host / local:** Clone the repo and double-click `index.html`. Toggle the **🔑 Bring your own key** tab, enter your Anthropic API key (stored locally in your browser, see guide below). Cost: ~$0.01–0.02 per screenshot.
 
 For deploying your own hosted instance with Stripe credits, see [DEPLOY.md](DEPLOY.md).
+
+## Getting an Anthropic API key (3 minutes)
+
+If you go the BYOK route, you'll need a Claude API key from Anthropic. Here's how:
+
+1. Go to [console.anthropic.com](https://console.anthropic.com/) and sign up with email, Google, or GitHub.
+2. Verify your email.
+3. Click **Billing** in the left sidebar → add a payment method.
+4. Top up with **$5–10** in credits (roughly 500–1000 parses).
+5. Click **API Keys** in the sidebar → **Create Key**. Name it something like "hauler".
+6. Copy the key (starts with `sk-ant-`) — you can only see it once, so save it somewhere safe like a password manager.
+7. Paste it into the **Claude API Key** field in the app.
+
+The key is stored only in your browser's localStorage and sent directly to Anthropic — never to any third party server.
+
+> **Security tip:** if you ever paste the key on a shared or public machine, revoke it from the Anthropic console afterwards. The hosted version at scrapwavesurvivor.com avoids this entirely by handling the key server-side.
 
 ## Roadmap
 
