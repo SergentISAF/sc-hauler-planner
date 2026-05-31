@@ -183,6 +183,20 @@
   .warn-box { background: rgba(255,152,0,0.15); border-left: 4px solid var(--warn); padding: 10px 14px; margin: 10px 0; font-size: 14px; }
   .info-box { background: rgba(79,195,247,0.08); border-left: 4px solid var(--accent); padding: 10px 14px; margin: 10px 0; font-size: 14px; }
   .err-box { background: rgba(244,67,54,0.15); border-left: 4px solid var(--err); padding: 10px 14px; margin: 10px 0; font-size: 14px; }
+
+  .mode-tabs { display: flex; gap: 4px; margin: 0 0 14px; background: var(--bg); padding: 4px; border-radius: 6px; border: 1px solid var(--border); }
+  .mode-tab { flex: 1; background: transparent; color: var(--text-dim); padding: 8px 12px; font-size: 13px; font-weight: bold; border-radius: 4px; }
+  .mode-tab.active { background: var(--accent-dim); color: white; }
+  .mode-tab:hover:not(.active) { background: var(--bg-step); color: var(--text); }
+
+  .credits-display { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; background: rgba(79,195,247,0.12); border: 1px solid var(--accent); border-radius: 20px; font-size: 14px; }
+  .credits-display strong { color: var(--accent); font-size: 18px; }
+  .price-card { background: var(--bg); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 6px; padding: 14px 16px; margin: 8px 0; }
+  .price-card .price-head { font-size: 20px; font-weight: bold; color: var(--accent); margin-bottom: 4px; }
+  .price-card .price-sub { color: var(--text-dim); font-size: 13px; margin-bottom: 12px; }
+  .hint { color: var(--text-dim); font-size: 12px; margin: 6px 0 0; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .row > input { flex: 1; min-width: 200px; }
 </style>
 </head>
 <body>
@@ -192,10 +206,43 @@
 <div class="panel" id="setup-panel">
   <h3 style="margin-top:0">⚙️ Setup</h3>
 
-  <label class="field">
-    <span class="lbl">Claude API Key (stored locally in your browser)</span>
-    <input type="password" id="api-key" placeholder="sk-ant-...">
-  </label>
+  <div class="mode-tabs">
+    <button class="mode-tab active" data-mode="paid">⚡ Credits</button>
+    <button class="mode-tab" data-mode="byok">🔑 Bring your own key</button>
+  </div>
+
+  <div id="paid-mode-section">
+    <div id="paid-no-token">
+      <div class="price-card">
+        <div class="price-head">€5 for 200 credits</div>
+        <div class="price-sub">1 credit = 1 contract screenshot parsed. No subscription, no expiry. Pay once, parse 200.</div>
+        <button id="buy-btn">Buy 200 credits</button>
+      </div>
+      <details style="margin-top:10px">
+        <summary>I already have a token</summary>
+        <div class="row" style="margin-top:8px">
+          <input type="text" id="token-input" placeholder="paste your token here">
+          <button id="apply-token-btn" class="secondary">Apply</button>
+        </div>
+      </details>
+    </div>
+    <div id="paid-with-token" style="display:none">
+      <div class="row">
+        <span class="credits-display">⚡ <strong id="credits-count">0</strong> credits left</span>
+        <button id="buy-more-btn">Buy 200 more</button>
+        <button id="forget-token-btn" class="secondary">Sign out</button>
+      </div>
+      <p class="hint">Your token is stored in this browser only. Save it somewhere safe if you want to use the tool from another device.</p>
+    </div>
+  </div>
+
+  <div id="byok-mode-section" style="display:none">
+    <label class="field">
+      <span class="lbl">Claude API Key (stored locally in your browser)</span>
+      <input type="password" id="api-key" placeholder="sk-ant-...">
+    </label>
+    <p class="hint">Bring your own Anthropic API key from <a href="https://console.anthropic.com/" target="_blank" style="color:var(--accent)">console.anthropic.com</a>. Cost: ~$0.01 per parse, billed to you directly. Unlimited usage.</p>
+  </div>
 
   <label class="field">
     <span class="lbl">Ship</span>
@@ -267,10 +314,14 @@ const STORAGE = {
   start: 'sc-tp-start',
   returnToStart: 'sc-tp-return',
   checks: 'sc-tp-checks-v2',
+  mode: 'sc-tp-mode',         // 'paid' or 'byok'
+  token: 'sc-tp-token',       // paid token from /api/claim
 };
 
+const API_BASE = ''; // same-origin; worker handles /api/* on this domain
+
 // ========== UI SETUP ==========
-function initUI() {
+async function initUI() {
   logEl = document.getElementById('log');
   planEl = document.getElementById('plan-output');
 
@@ -287,15 +338,114 @@ function initUI() {
   document.getElementById('start-station').value = localStorage.getItem(STORAGE.start) || '';
   document.getElementById('return-to-start').checked = localStorage.getItem(STORAGE.returnToStart) === 'true';
 
-  document.getElementById('api-key').addEventListener('change', e => localStorage.setItem(STORAGE.apiKey, e.target.value));
+  document.getElementById('api-key').addEventListener('change', e => { localStorage.setItem(STORAGE.apiKey, e.target.value); updateButtons(); });
   shipSel.addEventListener('change', e => localStorage.setItem(STORAGE.ship, e.target.value));
   document.getElementById('start-station').addEventListener('change', e => localStorage.setItem(STORAGE.start, e.target.value));
   document.getElementById('return-to-start').addEventListener('change', e => localStorage.setItem(STORAGE.returnToStart, e.target.checked));
 
   setupDropzone();
+  setupModeUI();
   document.getElementById('parse-btn').addEventListener('click', parseAll);
   document.getElementById('generate-btn').addEventListener('click', generatePlan);
   document.getElementById('clear-btn').addEventListener('click', clearAll);
+
+  await handleClaimFromUrl();
+  refreshModeUI();
+}
+
+function setupModeUI() {
+  document.querySelectorAll('.mode-tab').forEach(t => {
+    t.addEventListener('click', () => {
+      setMode(t.dataset.mode);
+    });
+  });
+  document.getElementById('buy-btn').addEventListener('click', startCheckout);
+  document.getElementById('buy-more-btn').addEventListener('click', startCheckout);
+  document.getElementById('forget-token-btn').addEventListener('click', () => {
+    if (!confirm('Forget your token? You can paste it back in later if you saved it.')) return;
+    localStorage.removeItem(STORAGE.token);
+    refreshModeUI();
+  });
+  document.getElementById('apply-token-btn').addEventListener('click', async () => {
+    const t = document.getElementById('token-input').value.trim();
+    if (!t) return;
+    try {
+      const credits = await fetchCredits(t);
+      localStorage.setItem(STORAGE.token, t);
+      refreshModeUI();
+      alert(`Token valid. ${credits} credits available.`);
+    } catch (e) {
+      alert('Token not valid: ' + e.message);
+    }
+  });
+}
+
+function getMode() {
+  return localStorage.getItem(STORAGE.mode) || 'paid';
+}
+function setMode(m) {
+  localStorage.setItem(STORAGE.mode, m);
+  refreshModeUI();
+}
+
+function refreshModeUI() {
+  const mode = getMode();
+  document.querySelectorAll('.mode-tab').forEach(t => t.classList.toggle('active', t.dataset.mode === mode));
+  document.getElementById('paid-mode-section').style.display = mode === 'paid' ? '' : 'none';
+  document.getElementById('byok-mode-section').style.display = mode === 'byok' ? '' : 'none';
+
+  if (mode === 'paid') {
+    const token = localStorage.getItem(STORAGE.token);
+    document.getElementById('paid-no-token').style.display = token ? 'none' : '';
+    document.getElementById('paid-with-token').style.display = token ? '' : 'none';
+    if (token) refreshCreditsDisplay(token);
+  }
+  updateButtons();
+}
+
+async function refreshCreditsDisplay(token) {
+  try {
+    const credits = await fetchCredits(token);
+    document.getElementById('credits-count').textContent = credits;
+  } catch (e) {
+    document.getElementById('credits-count').textContent = '?';
+  }
+}
+
+async function fetchCredits(token) {
+  const r = await fetch(`${API_BASE}/api/credits?token=${encodeURIComponent(token)}`);
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error || 'failed');
+  return j.credits;
+}
+
+async function startCheckout() {
+  try {
+    const r = await fetch(`${API_BASE}/api/buy`, { method: 'POST' });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || 'failed');
+    window.location.href = j.url;
+  } catch (e) {
+    alert('Could not start checkout: ' + e.message);
+  }
+}
+
+async function handleClaimFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const sid = params.get('claim');
+  if (!sid) return;
+  try {
+    const r = await fetch(`${API_BASE}/api/claim?session_id=${encodeURIComponent(sid)}`);
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || 'claim failed');
+    localStorage.setItem(STORAGE.token, j.token);
+    localStorage.setItem(STORAGE.mode, 'paid');
+    // Strip the query param so refreshing the page doesn't re-claim
+    history.replaceState({}, '', window.location.pathname);
+    alert(`Payment confirmed. ${j.credits} credits added.\n\nYour token has been saved to this browser. Save it somewhere safe to use on other devices.`);
+  } catch (e) {
+    alert('Could not claim credits: ' + e.message + '\n\nIf you paid but credits did not arrive, contact support with your Stripe receipt.');
+  }
 }
 
 function setupDropzone() {
@@ -365,7 +515,14 @@ function statusLabel(img) {
 }
 
 function updateButtons() {
-  document.getElementById('parse-btn').disabled = images.length === 0 || !document.getElementById('api-key').value;
+  const mode = getMode ? getMode() : 'paid';
+  let hasAuth;
+  if (mode === 'byok') {
+    hasAuth = !!document.getElementById('api-key').value;
+  } else {
+    hasAuth = !!localStorage.getItem(STORAGE.token);
+  }
+  document.getElementById('parse-btn').disabled = images.length === 0 || !hasAuth;
   document.getElementById('generate-btn').disabled = contracts.length === 0;
 }
 
@@ -378,10 +535,18 @@ function log(msg, kind='') {
   logEl.scrollTop = logEl.scrollHeight;
 }
 
-// ========== CLAUDE API ==========
+// ========== PARSE LOOP ==========
 async function parseAll() {
-  const apiKey = document.getElementById('api-key').value.trim();
-  if (!apiKey) { alert('Enter Claude API key first'); return; }
+  const mode = getMode();
+  let apiKey = null;
+  let token = null;
+  if (mode === 'byok') {
+    apiKey = document.getElementById('api-key').value.trim();
+    if (!apiKey) { alert('Enter Claude API key first'); return; }
+  } else {
+    token = localStorage.getItem(STORAGE.token);
+    if (!token) { alert('Buy credits or paste a token first'); return; }
+  }
 
   contracts = [];
   log(`Starting parse of ${images.length} image(s)...`, 'info');
@@ -394,7 +559,9 @@ async function parseAll() {
     img.status = 'parsing';
     renderThumbs();
     try {
-      const result = await callClaude(apiKey, img.dataUrl, img.file.type);
+      const result = mode === 'byok'
+        ? await callClaudeBYOK(apiKey, img.dataUrl, img.file.type)
+        : await callClaudeViaProxy(token, img.dataUrl, img.file.type);
       img.parsed = result;
       img.status = 'ok';
       if (result.valid) {
@@ -411,10 +578,23 @@ async function parseAll() {
     renderThumbs();
   }
   log(`Done. ${contracts.length} valid contracts ready.`, 'info');
+  if (mode === 'paid') refreshCreditsDisplay(token);
   updateButtons();
 }
 
-async function callClaude(apiKey, dataUrl, mediaType) {
+async function callClaudeViaProxy(token, dataUrl, mediaType) {
+  const base64 = dataUrl.split(',')[1];
+  const r = await fetch(`${API_BASE}/api/parse`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ token, image: base64, mediaType })
+  });
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error || `proxy ${r.status}`);
+  return j.parsed;
+}
+
+async function callClaudeBYOK(apiKey, dataUrl, mediaType) {
   const base64 = dataUrl.split(',')[1];
   const prompt = `You are a Star Citizen contract parser. Read this contract screen and return ONLY valid JSON (no markdown, no explanation) in exactly this format:
 

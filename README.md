@@ -32,11 +32,11 @@ Station overview and step-by-step checklist with tick-as-you-go pickups and deli
 
 ## Run it
 
-Double-click `index.html`. That's the whole install.
+**Hosted version:** [scrapwavesurvivor.com](https://scrapwavesurvivor.com) — buy 200 credits for €5 (~10 contract runs), or bring your own Anthropic API key for unlimited usage at cost.
 
-First time, enter your own Claude API key (stored locally in your browser). Grab one at [console.anthropic.com](https://console.anthropic.com/).
+**Self-host / local:** Clone the repo and double-click `index.html`. Toggle the **🔑 Bring your own key** tab, enter your Anthropic API key (stored locally in your browser, grab one at [console.anthropic.com](https://console.anthropic.com/)). Cost: ~$0.01–0.02 per screenshot.
 
-**Cost:** roughly $0.01–0.02 per screenshot using Claude Sonnet 4.6 vision.
+For deploying your own hosted instance with Stripe credits, see [DEPLOY.md](DEPLOY.md).
 
 ## Roadmap
 

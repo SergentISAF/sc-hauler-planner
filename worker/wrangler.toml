@@ -1,0 +1,30 @@
+name = "sc-hauler-planner-api"
+main = "src/index.js"
+compatibility_date = "2026-05-01"
+
+# Set via: wrangler kv namespace create HAULER_KV
+# Then replace the id below with the one from the output.
+kv_namespaces = [
+  { binding = "HAULER_KV", id = "REPLACE_AFTER_KV_CREATE" }
+]
+
+# Secrets — set via wrangler secret put <NAME>:
+#   ANTHROPIC_API_KEY     — your Anthropic API key (sk-ant-...)
+#   STRIPE_SECRET_KEY     — your Stripe secret key (sk_live_... or sk_test_...)
+#
+# Vars — edit values below as needed.
+[vars]
+ALLOWED_ORIGIN     = "https://scrapwavesurvivor.com"
+PUBLIC_URL         = "https://scrapwavesurvivor.com"
+CREDITS_PER_PACK   = "200"
+PACK_PRICE_CENTS   = "500"
+PACK_CURRENCY      = "eur"
+PACK_PRODUCT_NAME  = "SC Hauler Planner — 200 credits"
+SUPPORT_EMAIL      = "support@scrapwavesurvivor.com"
+CLAUDE_MODEL       = "claude-sonnet-4-6"
+
+# Custom domain routing (set after Cloudflare Pages is connected to scrapwavesurvivor.com)
+# Worker handles all /api/* paths on the domain.
+routes = [
+  { pattern = "scrapwavesurvivor.com/api/*", zone_name = "scrapwavesurvivor.com" }
+]
