@@ -70,9 +70,12 @@
   button.danger:hover { background: #a03a3a; }
 
   .dropzone {
+    display: block;
+    box-sizing: border-box;
+    width: 100%;
     border: 2px dashed var(--border);
     border-radius: 8px;
-    padding: 40px;
+    padding: 30px 20px;
     text-align: center;
     color: var(--text-dim);
     cursor: pointer;
@@ -197,6 +200,25 @@
   .hint { color: var(--text-dim); font-size: 12px; margin: 6px 0 0; }
   .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   .row > input { flex: 1; min-width: 200px; }
+
+  .cargo-map { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px 20px; margin-bottom: 20px; }
+  .cargo-map-head { font-size: 14px; color: var(--text-dim); padding-bottom: 10px; border-bottom: 1px solid var(--border); margin-bottom: 12px; }
+  .cargo-map-head strong { color: var(--accent); }
+  .cargo-grids { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+  .cargo-zone { background: var(--bg-step); border: 2px solid var(--accent); border-radius: 6px; padding: 12px 14px; }
+  .cargo-zone-title { color: var(--accent); font-weight: bold; text-align: center; margin: 0 0 4px; font-size: 14px; }
+  .cargo-zone-sub { color: var(--text-dim); text-align: center; font-size: 11px; margin-bottom: 12px; font-style: italic; }
+  .cargo-layer { background: var(--bg); border: 2px solid var(--border); border-radius: 4px; padding: 10px 12px; margin: 6px 0; font-size: 13px; }
+  .cargo-layer.layer-bottom { border-color: #f44336; background: rgba(244,67,54,0.12); }
+  .cargo-layer.layer-mid { border-color: #ff9800; background: rgba(255,152,0,0.12); }
+  .cargo-layer.layer-top { border-color: #4caf50; background: rgba(76,175,80,0.12); }
+  .cargo-layer-meta { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; font-weight: bold; }
+  .cargo-layer.layer-bottom .cargo-layer-meta { color: #f44336; }
+  .cargo-layer.layer-mid .cargo-layer-meta { color: #ff9800; }
+  .cargo-layer.layer-top .cargo-layer-meta { color: #4caf50; }
+  .cargo-layer-body strong { color: var(--text); }
+  .cargo-layer-dest { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
+  .cargo-zone-total { font-size: 11px; color: var(--text-dim); text-align: center; margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--border); }
 </style>
 </head>
 <body>
@@ -819,6 +841,9 @@ function renderPlan(plan, ship) {
   });
   html += `</div>`;
 
+  // Cargo loading map
+  html += renderCargoMap(plan, ship);
+
   // Loading note
   html += `<div class="info-box"><strong>📦 LIFO loading:</strong> The delivery order below follows LIFO — pack first (at the bottom) what's delivered LAST. Pack last (on top) what's delivered FIRST.${ship.grids > 1 ? ` The ${ship.name} has ${ship.grids} cargo grids — use one for local deliveries and one for return cargo to avoid rearranging mid-trip.` : ''}</div>`;
 
@@ -866,6 +891,112 @@ function renderPlan(plan, ship) {
 
 function returnToStartCheck() {
   return document.getElementById('return-to-start').checked;
+}
+
+// ========== CARGO MAP ==========
+function renderCargoMap(plan, ship) {
+  const { stops, peakCargo, deliveries } = plan;
+
+  // Annotate each delivery with its pickup stop index and drop stop index
+  const stopName = i => (stops[i]?.station || '').replace(' (return)', '');
+  const annotated = deliveries.map(d => {
+    const pickupIdx = stops.findIndex(s => s.station.replace(' (return)', '') === d.pickup);
+    const dropIdx = stops.findIndex((s, i) => i > pickupIdx && s.station.replace(' (return)', '') === d.delivery);
+    return { ...d, pickupIdx, dropIdx };
+  });
+
+  // Decide zones
+  // Zone A (forward / front grid): deliveries picked up at the START (stop 0)
+  // Zone B (back / second grid): deliveries picked up mid-route (typically return cargo)
+  const zoneA = annotated.filter(d => d.pickupIdx === 0);
+  const zoneB = annotated.filter(d => d.pickupIdx > 0);
+
+  // LIFO sort: last-delivered first (bottom of stack), first-delivered last (top)
+  const lifoSort = (a, b) => b.dropIdx - a.dropIdx;
+  zoneA.sort(lifoSort);
+  zoneB.sort(lifoSort);
+
+  const useTwoGrids = ship.grids > 1 && zoneA.length > 0 && zoneB.length > 0;
+
+  let html = `<h2>🚛 Cargo Loading Map</h2>
+    <div class="cargo-map">
+      <div class="cargo-map-head">
+        <strong>${ship.name}</strong> — ${ship.scu} SCU capacity${ship.grids > 1 ? ` (${ship.grids}× ${ship.gridSize || Math.floor(ship.scu/ship.grids)} SCU grids)` : ''}.
+        Peak load: <span class="scu">${peakCargo} SCU</span> (${Math.round(peakCargo/ship.scu*100)}%).
+        ${ship.maxContainer ? `Max container: ${ship.maxContainer} SCU.` : ''}
+      </div>
+      <div class="cargo-grids">`;
+
+  if (useTwoGrids) {
+    html += renderZone(
+      ship.grids === 2 ? 'PORT GRID' : 'FRONT GRID',
+      'Local deliveries (LIFO — bottom packed first)',
+      zoneA, ship
+    );
+    html += renderZone(
+      ship.grids === 2 ? 'STARBOARD GRID' : 'BACK GRID',
+      'Return cargo (loaded en-route)',
+      zoneB, ship,
+      true /* allItems sorted by pickup not LIFO */
+    );
+  } else {
+    // Single grid: all items together, LIFO
+    const all = [...zoneB, ...zoneA].sort(lifoSort);
+    html += renderZone('CARGO GRID', 'LIFO — bottom packed first, top out first', all, ship);
+  }
+
+  html += `</div></div>`;
+  return html;
+}
+
+function renderZone(title, subtitle, items, ship, isReturnZone = false) {
+  if (items.length === 0) return '';
+  const total = items.reduce((s, d) => s + d.scu, 0);
+  const cap = ship.gridSize || ship.scu;
+  const pct = Math.round(total / cap * 100);
+
+  let html = `<div class="cargo-zone">
+    <div class="cargo-zone-title">${title}</div>
+    <div class="cargo-zone-sub">${subtitle}</div>`;
+
+  if (isReturnZone) {
+    // Group return items by pickup stop, show oldest pickup at bottom
+    const byPickup = {};
+    items.forEach(d => {
+      if (!byPickup[d.pickupIdx]) byPickup[d.pickupIdx] = [];
+      byPickup[d.pickupIdx].push(d);
+    });
+    const pickupStops = Object.keys(byPickup).map(Number).sort((a, b) => a - b);
+    pickupStops.forEach(idx => {
+      const stop = items[0].pickupIdx === idx ? items[0] : byPickup[idx][0];
+      const stopName = (stop?.pickup) || `Stop ${idx}`;
+      html += `<div class="cargo-layer">
+        <div class="cargo-layer-meta">Loaded at ${stopName}</div>
+        ${byPickup[idx].map(d => `
+          <div class="cargo-layer-body">
+            <strong>C${d.contractIdx + 1} ${d.commodity}</strong> · ${d.scu} SCU
+            <div class="cargo-layer-dest">→ ${d.delivery}</div>
+          </div>`).join('')}
+      </div>`;
+    });
+  } else {
+    items.forEach((d, i) => {
+      const isFirst = i === 0;
+      const isLast = i === items.length - 1;
+      const cls = isFirst ? 'layer-bottom' : (isLast ? 'layer-top' : 'layer-mid');
+      const meta = isFirst ? 'PACK FIRST · OUT LAST' : (isLast ? 'PACK LAST · OUT FIRST' : 'MIDDLE');
+      html += `<div class="cargo-layer ${cls}">
+        <div class="cargo-layer-meta">${meta}</div>
+        <div class="cargo-layer-body">
+          <strong>C${d.contractIdx + 1} ${d.commodity}</strong> · ${d.scu} SCU
+          <div class="cargo-layer-dest">→ ${d.delivery}</div>
+        </div>
+      </div>`;
+    });
+  }
+
+  html += `<div class="cargo-zone-total">Used: ${total} / ${cap} SCU (${pct}%)</div></div>`;
+  return html;
 }
 
 function attachCheckHandlers() {
