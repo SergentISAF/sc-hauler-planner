@@ -6,17 +6,9 @@ Single-file web app that automatically generates optimized transport plans for S
 
 ## Demo
 
-Generated plan from a 9-contract run on Hurston (Everus Harbor → Sakura → HDPC-Farneseway → HDPC-Cassilio → Everus Harbor):
+Generated plan from a 9-contract run on Hurston starting at Everus Harbor with the RSI Hermes. Shows the contract status, station-by-station overview, and the Cargo Loading Map with Port Grid (local Hurston deliveries) and Starboard Grid (Everus-bound return cargo loaded en-route):
 
-![Overview with progress bar and contract status](screenshots/01-overview.png)
-
-Cargo loading map for the RSI Hermes (mirrored 144 SCU grids), showing the LIFO layers in the Port Grid for Hurston deliveries and the Starboard Grid filled in-flight with Everus-bound return cargo:
-
-![Hermes cargo grid loading map](screenshots/02-hermes-cargo-grid.png)
-
-Station overview and step-by-step checklist with tick-as-you-go pickups and deliveries:
-
-![Step-by-step checklist](screenshots/03-step-by-step.png)
+![Generated transport plan with station overview and cargo loading map](screenshots/01-overview.png)
 
 ## Features
 
