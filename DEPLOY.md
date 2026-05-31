@@ -10,7 +10,7 @@ Estimated time: 30-45 minutes once you have Stripe + Anthropic accounts.
 
 You need accounts/keys for:
 - **Cloudflare** — for DNS, Pages (static hosting), Worker (API proxy) and KV (credit storage). You already have this.
-- **Anthropic** — get an API key at https://console.anthropic.com/. Top up at least $20 to start.
+- **Anthropic** — get an API key at https://console.anthropic.com/. Top up $10–20 to start (one parse costs about $0.006, so $10 buys you ~1700 parses).
 - **Stripe** — sign up at https://stripe.com (KYC takes 1-2 days if new). Start in **test mode**, switch to live when ready.
 - **Node.js + npm** — to run Wrangler (Cloudflare's CLI).
 
@@ -205,15 +205,36 @@ wrangler kv key put --binding=HAULER_KV "token:USER_TOKEN" '{"credits": 500, "em
 
 Anthropic dashboard → Usage shows daily spend. Cloudflare KV reads/writes are well within free tier (100k/day reads, 1k/day writes) at any realistic traffic level.
 
+### Real-world cost per parse
+
+Measured against Claude Sonnet 4.6 vision in mid-2026: **~$0.006 per parse** (about half a cent). One 9-contract run = ~$0.05. The earlier $0.01–0.02 estimate was conservative; actuals are roughly 3× lower because contract screenshots are small images with short JSON output.
+
+### Per-pack unit economics
+
+At the default pricing of €5 per 200 credits:
+
+| Line | Amount |
+|---|---|
+| Customer pays | €5.00 (~$5.50) |
+| Stripe fee (~3% + €0.25) | -€0.40 |
+| Anthropic cost (200 × $0.006) | -$1.20 (~€1.10) |
+| **Your net per pack** | **~€3.50 (~70% margin)** |
+
+That's enough headroom to lower the price to €4 if competition pushes you to, or to absorb an Anthropic price hike without re-pricing.
+
 ### Costs at various traffic levels
 
-| Active users/day | Parses/day | Anthropic cost/day | Stripe fee | Your net/day |
-|---|---|---|---|---|
-| 10 | 50  | ~$0.75 | depends | depends |
-| 100 | 500 | ~$7.50 | ~€0.30/sale | (revenue – costs) |
-| 1000 | 5000 | ~$75 | scales | scales |
+| Active users/day | Parses/day | Anthropic cost/day | Cloudflare cost |
+|---|---|---|---|
+| 10  | 50    | ~$0.30 | free tier |
+| 100 | 500   | ~$3.00 | free tier |
+| 1000 | 5000 | ~$30   | free tier |
 
-Worker + Pages + KV are free at all these levels.
+Worker + Pages + KV stay in the free tier well past 1000 active users/day. The dominant cost is Anthropic, which scales linearly with parses and is paid by your customers through the credit packs.
+
+### Monitoring cost in practice
+
+Watch the Anthropic dashboard for actual cost drift. If a sudden spike happens (e.g. someone abusing the proxy with unrelated images), check `wrangler tail` for the offending token and revoke it by setting `credits: 0` in KV.
 
 ---
 
