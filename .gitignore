@@ -22,3 +22,6 @@ api-keys.txt
 
 # Wrangler local state
 .wrangler/
+
+# Built site bundle
+dist/
