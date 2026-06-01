@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Feedback · SC Hauler Planner</title>
+<style>
+  :root {
+    --bg: #060d16; --bg-2: #0a1420; --panel: #0f1d2e; --line: #213750; --line-bright: #305a82;
+    --cyan: #4FC3F7; --cyan-bright: #8ee0ff; --orange: #ff9c33; --green: #54c66a;
+    --text: #e9eff6; --dim: #91a6bd; --dimmer: #5e768f;
+    --mono: ui-monospace, 'SF Mono', 'Consolas', 'Menlo', monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text); font-family: var(--sans);
+    font-size: 16px; line-height: 1.6; overflow-x: hidden; min-height: 100vh;
+    background-image: radial-gradient(800px 460px at 80% -12%, rgba(79,195,247,0.09), transparent 60%);
+  }
+  body::before {
+    content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background-image: linear-gradient(rgba(48,90,130,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(48,90,130,0.05) 1px, transparent 1px);
+    background-size: 48px 48px; mask-image: linear-gradient(180deg, rgba(0,0,0,0.85), rgba(0,0,0,0.15) 70%, transparent);
+  }
+  .wrap { position: relative; z-index: 1; max-width: 640px; margin: 0 auto; padding: 0 22px; }
+  a { color: var(--cyan); text-decoration: none; }
+  h1 { font-size: clamp(26px, 4vw, 34px); font-weight: 800; margin: 0; letter-spacing: -0.01em; }
+
+  header { border-bottom: 1px solid var(--line); background: rgba(6,13,22,0.8); backdrop-filter: blur(10px); position: sticky; top: 0; z-index: 30; }
+  .nav { display: flex; align-items: center; gap: 16px; height: 62px; max-width: 640px; margin: 0 auto; padding: 0 22px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 15px; color: var(--text); }
+  .brand .mark { width: 28px; height: 28px; display: grid; place-items: center; font-family: var(--mono); font-weight: 700; font-size: 14px; color: #03121c; background: linear-gradient(135deg, var(--cyan-bright), var(--cyan)); border-radius: 5px; box-shadow: 0 0 12px rgba(79,195,247,0.45); }
+  .cur { animation: blink 1.1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .nav .spacer { flex: 1; }
+  .langsel { font-family: var(--mono); font-size: 12px; letter-spacing: 1px; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 2px; padding: 7px 8px; cursor: pointer; }
+  .back { color: var(--dim); font-size: 14px; font-weight: 600; }
+  .back:hover { color: var(--text); }
+
+  .eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 3px; text-transform: uppercase; color: var(--cyan); display: inline-flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+  .eyebrow::before { content: ''; width: 20px; height: 1px; background: var(--cyan); display: inline-block; box-shadow: 0 0 6px var(--cyan); }
+
+  main { padding: 48px 0 70px; }
+  .intro { color: var(--dim); margin: 14px 0 30px; }
+
+  .hud { position: relative; background: linear-gradient(160deg, var(--panel), var(--bg-2)); border: 1px solid var(--line); border-radius: 3px; }
+  .hud::before, .hud::after { content: ''; position: absolute; width: 13px; height: 13px; border: 2px solid var(--cyan); opacity: 0.5; }
+  .hud::before { top: -1px; left: -1px; border-right: none; border-bottom: none; }
+  .hud::after { bottom: -1px; right: -1px; border-left: none; border-top: none; }
+
+  form { padding: 26px 24px; }
+  label.f { display: block; margin-bottom: 18px; }
+  label.f .lbl { display: block; font-family: var(--mono); font-size: 12px; letter-spacing: 1px; text-transform: uppercase; color: var(--dim); margin-bottom: 7px; }
+  label.f .hint { font-family: var(--sans); font-size: 12px; color: var(--dimmer); text-transform: none; letter-spacing: 0; margin-top: 5px; display: block; }
+  input, textarea, select {
+    width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--line);
+    border-radius: 2px; padding: 11px 12px; font-size: 14px; font-family: var(--sans);
+  }
+  input:focus, textarea:focus, select:focus { outline: none; border-color: var(--cyan); box-shadow: 0 0 0 1px var(--cyan); }
+  textarea { resize: vertical; min-height: 120px; }
+  .types { display: flex; gap: 8px; flex-wrap: wrap; }
+  .types label { flex: 1; min-width: 110px; cursor: pointer; }
+  .types input { display: none; }
+  .types .chip { display: block; text-align: center; padding: 10px; border: 1px solid var(--line); border-radius: 2px; font-size: 13px; font-weight: 600; color: var(--dim); transition: all .12s; }
+  .types input:checked + .chip { border-color: var(--cyan); color: var(--cyan); background: rgba(79,195,247,0.08); }
+  .btn { display: inline-flex; align-items: center; gap: 9px; cursor: pointer; border: none; font-family: var(--sans); font-weight: 700; font-size: 15px; padding: 13px 24px; color: #03121c; background: var(--cyan); border-radius: 2px; clip-path: polygon(0 0, calc(100% - 11px) 0, 100% 11px, 100% 100%, 11px 100%, 0 calc(100% - 11px)); transition: transform .12s, box-shadow .15s, background .15s; }
+  .btn:hover { background: var(--cyan-bright); box-shadow: 0 6px 24px rgba(79,195,247,0.30); transform: translateY(-1px); }
+  .priority { font-family: var(--mono); font-size: 12px; color: var(--orange); margin-top: 4px; }
+
+  .sent { padding: 40px 28px; text-align: center; display: none; }
+  .sent .big { font-size: 40px; }
+  .sent h2 { margin: 12px 0 8px; font-size: 22px; }
+  .sent p { color: var(--dim); margin: 0 0 22px; }
+
+  footer { border-top: 1px solid var(--line); padding: 30px 0 50px; }
+  .built { font-family: var(--mono); font-size: 12px; color: var(--dimmer); letter-spacing: 1px; }
+  .legal { font-family: var(--mono); font-size: 12px; color: var(--dimmer); margin-top: 8px; }
+  .legal a { color: var(--dim); } .legal a:hover { color: var(--cyan); }
+  .privacy { font-family: var(--mono); font-size: 12px; color: var(--green); margin-top: 10px; opacity: 0.85; }
+  .privacy::before { content: '// '; color: var(--dimmer); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="nav">
+    <a class="brand" href="index.html"><span class="mark">&gt;<span class="cur">_</span></span><span>SC Hauler Planner</span></a>
+    <span class="spacer"></span>
+    <a class="back" href="index.html" data-i18n="back">← Back</a>
+    <select class="langsel" id="langsel" aria-label="Language">
+      <option value="en">EN</option><option value="da">DA</option><option value="de">DE</option>
+      <option value="fr">FR</option><option value="no">NO</option><option value="sv">SV</option><option value="fi">FI</option>
+    </select>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+    <span class="eyebrow" data-i18n="eyebrow">Roadmap input</span>
+    <h1 data-i18n="h">Feedback and wishes</h1>
+    <p class="intro" data-i18n="intro">Tell me what works, what's broken, and what you want next. If you bought credits, you get priority on the roadmap.</p>
+
+    <div class="hud">
+      <form id="fbform">
+        <label class="f">
+          <span class="lbl" data-i18n="f_type">What is this?</span>
+          <div class="types">
+            <label><input type="radio" name="type" value="bug" checked><span class="chip" data-i18n="type_bug">Bug</span></label>
+            <label><input type="radio" name="type" value="ship"><span class="chip" data-i18n="type_ship">Ship data</span></label>
+            <label><input type="radio" name="type" value="feature"><span class="chip" data-i18n="type_feature">Feature wish</span></label>
+            <label><input type="radio" name="type" value="other"><span class="chip" data-i18n="type_other">Other</span></label>
+          </div>
+        </label>
+
+        <label class="f">
+          <span class="lbl" data-i18n="f_msg">Your message</span>
+          <textarea id="msg" data-i18n-ph="f_msg_ph" placeholder="What happened, or what you'd like to see..." required></textarea>
+        </label>
+
+        <label class="f">
+          <span class="lbl" data-i18n="f_token">Credits token <span style="text-transform:none;letter-spacing:0;color:var(--dimmer)" data-i18n="optional">(optional)</span></span>
+          <input type="text" id="token" data-i18n-ph="f_token_ph" placeholder="paste it for priority">
+          <span class="hint priority" data-i18n="f_token_hint">Bought credits? Paste your token and your note jumps the queue.</span>
+        </label>
+
+        <label class="f">
+          <span class="lbl" data-i18n="f_email">Email <span style="text-transform:none;letter-spacing:0;color:var(--dimmer)" data-i18n="optional">(optional)</span></span>
+          <input type="email" id="email" data-i18n-ph="f_email_ph" placeholder="only if you want a reply">
+          <span class="hint" data-i18n="f_email_hint">Only used to reply. Nothing else, no list.</span>
+        </label>
+
+        <button type="submit" class="btn" data-i18n="submit">Send it</button>
+      </form>
+
+      <div class="sent" id="sent">
+        <div class="big">📡</div>
+        <h2 data-i18n="sent_h">Got it. Thanks.</h2>
+        <p data-i18n="sent_p">Your note landed. If you left an email I'll get back when it makes sense.</p>
+        <a class="btn" href="index.html" data-i18n="sent_cta">Back to the site</a>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="built" data-i18n="built">Made by a hauler</div>
+    <div class="legal">Holmstad Group ApS · CVR 44303663 · <a href="mailto:dev@scrapwavesurvivors.com">dev@scrapwavesurvivors.com</a></div>
+    <div class="privacy" data-i18n="privacy">No cookies, no tracking. Your message goes straight to me.</div>
+  </div>
+</footer>
+
+<script>
+const I18N = {
+  en: { back:"← Back", eyebrow:"Roadmap input", h:"Feedback and wishes", intro:"Tell me what works, what's broken, and what you want next. If you bought credits, you get priority on the roadmap.", f_type:"What is this?", type_bug:"Bug", type_ship:"Ship data", type_feature:"Feature wish", type_other:"Other", f_msg:"Your message", f_msg_ph:"What happened, or what you'd like to see...", f_token:"Credits token", optional:"(optional)", f_token_ph:"paste it for priority", f_token_hint:"Bought credits? Paste your token and your note jumps the queue.", f_email:"Email", f_email_ph:"only if you want a reply", f_email_hint:"Only used to reply. Nothing else, no list.", submit:"Send it", sent_h:"Got it. Thanks.", sent_p:"Your note landed. If you left an email I'll get back when it makes sense.", sent_cta:"Back to the site", built:"Made by a hauler", privacy:"No cookies, no tracking. Your message goes straight to me." },
+  da: { back:"← Tilbage", eyebrow:"Input til roadmap", h:"Feedback og ønsker", intro:"Sig hvad der virker, hvad der er i stykker, og hvad du gerne vil have næst. Har du købt credits, kommer du først på roadmappet.", f_type:"Hvad handler det om?", type_bug:"Fejl", type_ship:"Skibsdata", type_feature:"Ønske", type_other:"Andet", f_msg:"Din besked", f_msg_ph:"Hvad skete der, eller hvad vil du gerne se...", f_token:"Credits-token", optional:"(valgfri)", f_token_ph:"indsæt den for prioritet", f_token_hint:"Købt credits? Indsæt din token, så ryger din note forrest.", f_email:"Email", f_email_ph:"kun hvis du vil have svar", f_email_hint:"Bruges kun til at svare. Intet andet, ingen liste.", submit:"Send", sent_h:"Modtaget. Tak.", sent_p:"Din besked er landet. Har du lagt en email, vender jeg tilbage når det giver mening.", sent_cta:"Tilbage til siden", built:"Lavet af en hauler", privacy:"Ingen cookies, ingen tracking. Din besked går direkte til mig." },
+  de: { back:"← Zurück", eyebrow:"Roadmap-Input", h:"Feedback und Wünsche", intro:"Sag mir, was läuft, was kaputt ist und was du dir wünschst. Wer Credits gekauft hat, kommt zuerst dran.", f_type:"Worum geht es?", type_bug:"Bug", type_ship:"Schiffsdaten", type_feature:"Wunsch", type_other:"Sonstiges", f_msg:"Deine Nachricht", f_msg_ph:"Was passiert ist, oder was du sehen möchtest...", f_token:"Credits-Token", optional:"(optional)", f_token_ph:"einfügen für Priorität", f_token_hint:"Credits gekauft? Token einfügen, dann rückt deine Notiz nach vorn.", f_email:"E-Mail", f_email_ph:"nur falls du Antwort willst", f_email_hint:"Nur für die Antwort. Sonst nichts, keine Liste.", submit:"Absenden", sent_h:"Angekommen. Danke.", sent_p:"Deine Notiz ist da. Wenn du eine E-Mail dagelassen hast, melde ich mich, wenn es passt.", sent_cta:"Zurück zur Seite", built:"Von einem Hauler gemacht", privacy:"Keine Cookies, kein Tracking. Deine Nachricht geht direkt an mich." },
+  fr: { back:"← Retour", eyebrow:"Entrée roadmap", h:"Retours et souhaits", intro:"Dis-moi ce qui marche, ce qui casse et ce que tu veux ensuite. Si tu as acheté des crédits, tu passes en premier.", f_type:"De quoi s'agit-il ?", type_bug:"Bug", type_ship:"Données vaisseau", type_feature:"Souhait", type_other:"Autre", f_msg:"Ton message", f_msg_ph:"Ce qui s'est passé, ou ce que tu aimerais voir...", f_token:"Jeton de crédits", optional:"(facultatif)", f_token_ph:"colle-le pour la priorité", f_token_hint:"Acheté des crédits ? Colle ton jeton et ta note passe devant.", f_email:"E-mail", f_email_ph:"seulement si tu veux une réponse", f_email_hint:"Sert uniquement à répondre. Rien d'autre, aucune liste.", submit:"Envoyer", sent_h:"Reçu. Merci.", sent_p:"Ta note est arrivée. Si tu as laissé un e-mail, je reviens vers toi quand ça a du sens.", sent_cta:"Retour au site", built:"Fait par un hauleur", privacy:"Pas de cookies, pas de pistage. Ton message m'arrive directement." },
+  no: { back:"← Tilbake", eyebrow:"Innspill til roadmap", h:"Tilbakemelding og ønsker", intro:"Si hva som virker, hva som er ødelagt, og hva du vil ha neste. Har du kjøpt credits, kommer du først på roadmapet.", f_type:"Hva gjelder det?", type_bug:"Feil", type_ship:"Skipsdata", type_feature:"Ønske", type_other:"Annet", f_msg:"Meldingen din", f_msg_ph:"Hva skjedde, eller hva vil du se...", f_token:"Credits-token", optional:"(valgfritt)", f_token_ph:"lim inn for prioritet", f_token_hint:"Kjøpt credits? Lim inn token, så havner notatet ditt først.", f_email:"E-post", f_email_ph:"bare hvis du vil ha svar", f_email_hint:"Brukes kun til å svare. Ingenting annet, ingen liste.", submit:"Send", sent_h:"Mottatt. Takk.", sent_p:"Notatet ditt landet. Har du lagt igjen en e-post, melder jeg fra når det gir mening.", sent_cta:"Tilbake til siden", built:"Laget av en hauler", privacy:"Ingen cookies, ingen sporing. Meldingen din går rett til meg." },
+  sv: { back:"← Tillbaka", eyebrow:"Input till roadmap", h:"Feedback och önskemål", intro:"Säg vad som funkar, vad som är trasigt och vad du vill ha härnäst. Har du köpt credits går du först.", f_type:"Vad gäller det?", type_bug:"Bugg", type_ship:"Skeppsdata", type_feature:"Önskemål", type_other:"Annat", f_msg:"Ditt meddelande", f_msg_ph:"Vad hände, eller vad vill du se...", f_token:"Credits-token", optional:"(valfritt)", f_token_ph:"klistra in för prioritet", f_token_hint:"Köpt credits? Klistra in din token så hamnar din notis först.", f_email:"E-post", f_email_ph:"bara om du vill ha svar", f_email_hint:"Används bara för att svara. Inget annat, ingen lista.", submit:"Skicka", sent_h:"Mottaget. Tack.", sent_p:"Din notis landade. Har du lämnat en e-post hör jag av mig när det är läge.", sent_cta:"Tillbaka till sidan", built:"Gjord av en hauler", privacy:"Inga cookies, ingen spårning. Ditt meddelande går direkt till mig." },
+  fi: { back:"← Takaisin", eyebrow:"Roadmap-syöte", h:"Palaute ja toiveet", intro:"Kerro mikä toimii, mikä on rikki ja mitä haluat seuraavaksi. Jos ostit krediittejä, pääset etusijalle.", f_type:"Mitä tämä koskee?", type_bug:"Bugi", type_ship:"Alusdata", type_feature:"Toive", type_other:"Muu", f_msg:"Viestisi", f_msg_ph:"Mitä tapahtui, tai mitä haluaisit nähdä...", f_token:"Krediittitunnus", optional:"(valinnainen)", f_token_ph:"liitä se etusijaa varten", f_token_hint:"Ostitko krediittejä? Liitä tunnuksesi, niin viestisi menee jonon kärkeen.", f_email:"Sähköposti", f_email_ph:"vain jos haluat vastauksen", f_email_hint:"Käytetään vain vastaamiseen. Ei muuta, ei listaa.", submit:"Lähetä", sent_h:"Tuli perille. Kiitos.", sent_p:"Viestisi saapui. Jos jätit sähköpostin, palaan asiaan kun se on järkevää.", sent_cta:"Takaisin sivustolle", built:"Haulerin tekemä", privacy:"Ei evästeitä, ei seurantaa. Viestisi tulee suoraan minulle." }
+};
+function applyLang(lang) {
+  const dict = I18N[lang] || I18N.en;
+  document.documentElement.lang = lang;
+  document.querySelectorAll('[data-i18n]').forEach(el => { const k = el.getAttribute('data-i18n'); if (dict[k] != null) el.textContent = dict[k]; });
+  document.querySelectorAll('[data-i18n-ph]').forEach(el => { const k = el.getAttribute('data-i18n-ph'); if (dict[k] != null) el.placeholder = dict[k]; });
+  localStorage.setItem('swp-lang', lang);
+  document.getElementById('langsel').value = lang;
+}
+const saved = localStorage.getItem('swp-lang');
+const browser = (navigator.language || 'en').slice(0,2).toLowerCase();
+applyLang(saved || (Object.keys(I18N).includes(browser) ? browser : 'en'));
+document.getElementById('langsel').addEventListener('change', e => applyLang(e.target.value));
+
+document.getElementById('fbform').addEventListener('submit', async e => {
+  e.preventDefault();
+  const payload = {
+    type: (document.querySelector('input[name="type"]:checked') || {}).value || 'other',
+    message: document.getElementById('msg').value,
+    token: document.getElementById('token').value,
+    email: document.getElementById('email').value
+  };
+  if (e.submitter) e.submitter.disabled = true;
+  // Fire-and-forget: same-origin /api/feedback on the deployed site. Fails silently on local file:// preview.
+  try { await fetch('/api/feedback', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) }); } catch (_) {}
+  document.getElementById('fbform').style.display = 'none';
+  document.getElementById('sent').style.display = 'block';
+});
+</script>
+
+</body>
+</html>

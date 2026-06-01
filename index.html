@@ -229,14 +229,14 @@
   <h3 style="margin-top:0">⚙️ Setup</h3>
 
   <div class="mode-tabs">
-    <button class="mode-tab active" data-mode="paid">⚡ Credits</button>
-    <button class="mode-tab" data-mode="byok">🔑 Bring your own key</button>
+    <button class="mode-tab" data-mode="paid">⚡ Credits</button>
+    <button class="mode-tab active" data-mode="byok">🔑 Bring your own key</button>
   </div>
 
   <div id="paid-mode-section">
     <div id="paid-no-token">
       <div class="price-card">
-        <div class="price-head">€5 for 200 credits</div>
+        <div class="price-head">€5 + VAT · 200 credits</div>
         <div class="price-sub">1 credit = 1 contract screenshot parsed. No subscription, no expiry. Pay once, parse 200.</div>
         <button id="buy-btn">Buy 200 credits</button>
       </div>
@@ -254,7 +254,14 @@
         <button id="buy-more-btn">Buy 200 more</button>
         <button id="forget-token-btn" class="secondary">Sign out</button>
       </div>
-      <p class="hint">Your token is stored in this browser only. Save it somewhere safe if you want to use the tool from another device.</p>
+      <label class="field" style="margin-top:12px">
+        <span class="lbl">🔐 Your access token — this is your key to your credits, save it</span>
+        <div class="row">
+          <input type="text" id="token-display" readonly onclick="this.select()">
+          <button id="copy-token-btn" class="secondary">Copy</button>
+        </div>
+      </label>
+      <p class="hint">Keep this safe. It is how you reach your credits from another device or browser. Lost it? <a href="#" id="recover-link" style="color:var(--accent)">Email it to me</a>.</p>
     </div>
   </div>
 
@@ -355,6 +362,7 @@ const STORAGE = {
 };
 
 const API_BASE = ''; // same-origin; worker handles /api/* on this domain
+const CREDITS_ENABLED = true; // Stripe live key + ANTHROPIC_API_KEY are set
 
 // ========== UI SETUP ==========
 async function initUI() {
@@ -397,6 +405,20 @@ function setupModeUI() {
   });
   document.getElementById('buy-btn').addEventListener('click', startCheckout);
   document.getElementById('buy-more-btn').addEventListener('click', startCheckout);
+  const copyTokenBtn = document.getElementById('copy-token-btn');
+  if (copyTokenBtn) copyTokenBtn.addEventListener('click', () => {
+    const t = localStorage.getItem(STORAGE.token) || '';
+    if (!t) return;
+    navigator.clipboard.writeText(t).then(() => { copyTokenBtn.textContent = 'Copied!'; setTimeout(() => copyTokenBtn.textContent = 'Copy', 1500); });
+  });
+  const recoverLink = document.getElementById('recover-link');
+  if (recoverLink) recoverLink.addEventListener('click', async (e) => {
+    e.preventDefault();
+    const email = prompt('Enter the email you paid with, and we will send your token to it:');
+    if (!email) return;
+    try { await fetch(`${API_BASE}/api/recover`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email }) }); } catch (_) {}
+    alert('If that email has credits, the token is on its way. Check your inbox.');
+  });
   document.getElementById('forget-token-btn').addEventListener('click', () => {
     if (!confirm('Forget your token? You can paste it back in later if you saved it.')) return;
     localStorage.removeItem(STORAGE.token);
@@ -417,6 +439,7 @@ function setupModeUI() {
 }
 
 function getMode() {
+  if (!CREDITS_ENABLED) return 'byok';
   return localStorage.getItem(STORAGE.mode) || 'paid';
 }
 function setMode(m) {
@@ -426,6 +449,9 @@ function setMode(m) {
 
 function refreshModeUI() {
   const mode = getMode();
+  // While credits are not live, hide the Credits tab so nobody hits a half-working checkout
+  const creditsTab = document.querySelector('.mode-tab[data-mode="paid"]');
+  if (creditsTab) creditsTab.style.display = CREDITS_ENABLED ? '' : 'none';
   document.querySelectorAll('.mode-tab').forEach(t => t.classList.toggle('active', t.dataset.mode === mode));
   document.getElementById('paid-mode-section').style.display = mode === 'paid' ? '' : 'none';
   document.getElementById('byok-mode-section').style.display = mode === 'byok' ? '' : 'none';
@@ -434,7 +460,11 @@ function refreshModeUI() {
     const token = localStorage.getItem(STORAGE.token);
     document.getElementById('paid-no-token').style.display = token ? 'none' : '';
     document.getElementById('paid-with-token').style.display = token ? '' : 'none';
-    if (token) refreshCreditsDisplay(token);
+    if (token) {
+      const td = document.getElementById('token-display');
+      if (td) td.value = token;
+      refreshCreditsDisplay(token);
+    }
   }
   updateButtons();
 }
@@ -456,6 +486,10 @@ async function fetchCredits(token) {
 }
 
 async function startCheckout() {
+  if (!CREDITS_ENABLED) {
+    alert('Prepaid credits launch soon. For now, use "Bring your own key" — it is free with your own Anthropic key.');
+    return;
+  }
   try {
     const r = await fetch(`${API_BASE}/api/buy`, { method: 'POST' });
     const j = await r.json();

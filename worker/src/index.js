@@ -43,6 +43,8 @@ export default {
       if (url.pathname === '/api/buy' && request.method === 'POST') return cors(await handleBuy(request, env), env);
       if (url.pathname === '/api/claim' && request.method === 'GET') return cors(await handleClaim(url, env), env);
       if (url.pathname === '/api/credits' && request.method === 'GET') return cors(await handleCredits(url, env), env);
+      if (url.pathname === '/api/feedback' && request.method === 'POST') return cors(await handleFeedback(request, env), env);
+      if (url.pathname === '/api/recover' && request.method === 'POST') return cors(await handleRecover(request, env), env);
       return cors(json({ error: 'not found' }, 404), env);
     } catch (err) {
       return cors(json({ error: err.message || 'internal error' }, 500), env);
@@ -62,6 +64,11 @@ async function handleParse(request, env) {
   if (!credit.credits || credit.credits <= 0) return json({ error: 'no credits left' }, 402);
 
   if (!body.image || !body.mediaType) return json({ error: 'missing image' }, 400);
+
+  // Input validation — block junk and oversized payloads BEFORE spending a credit or calling Anthropic
+  const ALLOWED_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+  if (!ALLOWED_TYPES.includes(body.mediaType)) return json({ error: 'unsupported image type' }, 400);
+  if (typeof body.image !== 'string' || body.image.length > 12_000_000) return json({ error: 'image too large' }, 413);
 
   // Reserve credit before calling Anthropic so we don't double-spend on retries
   credit.credits -= 1;
@@ -129,9 +136,11 @@ async function handleBuy(request, env) {
   form.append('line_items[0][price_data][currency]', env.PACK_CURRENCY);
   form.append('line_items[0][price_data][product_data][name]', env.PACK_PRODUCT_NAME);
   form.append('line_items[0][price_data][unit_amount]', env.PACK_PRICE_CENTS);
+  form.append('line_items[0][price_data][tax_behavior]', 'exclusive'); // €5 is net; VAT is added on top at checkout
   form.append('line_items[0][quantity]', '1');
-  form.append('success_url', `${env.PUBLIC_URL}/?claim={CHECKOUT_SESSION_ID}`);
-  form.append('cancel_url', env.PUBLIC_URL);
+  form.append('automatic_tax[enabled]', 'true'); // Stripe Tax computes VAT from customer location
+  form.append('success_url', `${env.PUBLIC_URL}/app/?claim={CHECKOUT_SESSION_ID}`);
+  form.append('cancel_url', `${env.PUBLIC_URL}/app/`);
   form.append('metadata[credits]', env.CREDITS_PER_PACK);
 
   const stripeResp = await fetch('https://api.stripe.com/v1/checkout/sessions', {
@@ -172,21 +181,39 @@ async function handleClaim(url, env) {
   const session = await stripeResp.json();
   if (session.payment_status !== 'paid') return json({ error: 'session not paid' }, 402);
 
-  // Issue token
-  const token = crypto.randomUUID();
-  const credits = parseInt(session.metadata?.credits || env.CREDITS_PER_PACK, 10);
-  const record = {
-    credits,
-    email: session.customer_details?.email || null,
-    stripe_session: sessionId,
-    created: Date.now()
-  };
+  const addCredits = parseInt(session.metadata?.credits || env.CREDITS_PER_PACK, 10);
+  const email = session.customer_details?.email || null;
+  const YEAR = 60 * 60 * 24 * 365;
 
-  // 365-day TTL
-  await env.HAULER_KV.put(`token:${token}`, JSON.stringify(record), { expirationTtl: 60 * 60 * 24 * 365 });
-  await env.HAULER_KV.put(`session:${sessionId}`, token, { expirationTtl: 60 * 60 * 24 * 365 });
+  // Top-up: if this email already has a token, add credits to it instead of
+  // issuing a new one (so a second pack accumulates rather than orphaning the rest)
+  let token = null;
+  let totalCredits = addCredits;
+  if (email) {
+    const existingToken = await env.HAULER_KV.get(`email:${email.toLowerCase()}`);
+    if (existingToken) {
+      const rec = await env.HAULER_KV.get(`token:${existingToken}`, { type: 'json' });
+      if (rec) {
+        rec.credits = (rec.credits || 0) + addCredits;
+        rec.last_topup = Date.now();
+        await env.HAULER_KV.put(`token:${existingToken}`, JSON.stringify(rec), { expirationTtl: YEAR });
+        token = existingToken;
+        totalCredits = rec.credits;
+      }
+    }
+  }
 
-  return json({ token, credits });
+  // First purchase for this email (or no email): issue a fresh token
+  if (!token) {
+    token = crypto.randomUUID();
+    const record = { credits: addCredits, email, stripe_session: sessionId, created: Date.now() };
+    await env.HAULER_KV.put(`token:${token}`, JSON.stringify(record), { expirationTtl: YEAR });
+    if (email) await env.HAULER_KV.put(`email:${email.toLowerCase()}`, token, { expirationTtl: YEAR });
+  }
+
+  await env.HAULER_KV.put(`session:${sessionId}`, token, { expirationTtl: YEAR });
+
+  return json({ token, credits: totalCredits });
 }
 
 async function handleCredits(url, env) {
@@ -195,6 +222,65 @@ async function handleCredits(url, env) {
   const credit = await env.HAULER_KV.get(`token:${token}`, { type: 'json' });
   if (!credit) return json({ error: 'invalid token' }, 401);
   return json({ credits: credit.credits });
+}
+
+async function handleFeedback(request, env) {
+  const body = await request.json().catch(() => ({}));
+  const message = (body.message || '').toString().trim().slice(0, 4000);
+  if (!message) return json({ error: 'empty message' }, 400);
+
+  const type = (body.type || 'other').toString().slice(0, 24);
+  const email = (body.email || '').toString().trim().slice(0, 200);
+  const token = (body.token || '').toString().trim().slice(0, 80);
+
+  // Priority flag if the sender pasted a valid credits token
+  let priority = false;
+  if (token) {
+    const c = await env.HAULER_KV.get(`token:${token}`, { type: 'json' });
+    if (c) priority = true;
+  }
+
+  const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const record = { type, message, email, priority, ts: Date.now() };
+  await env.HAULER_KV.put(`feedback:${id}`, JSON.stringify(record), { expirationTtl: 60 * 60 * 24 * 365 });
+
+  // Optional push to ntfy if NTFY_URL is set as a Worker var/secret
+  if (env.NTFY_URL) {
+    try {
+      await fetch(env.NTFY_URL, {
+        method: 'POST',
+        headers: { 'Title': `Hauler feedback: ${type}${priority ? ' (PRIORITY)' : ''}`, 'Tags': 'package' },
+        body: `${message}\n\n— ${email || 'no email'}`
+      });
+    } catch (_) { /* best effort */ }
+  }
+
+  return json({ ok: true });
+}
+
+async function handleRecover(request, env) {
+  const body = await request.json().catch(() => ({}));
+  const email = (body.email || '').toString().trim().toLowerCase().slice(0, 200);
+  // Always return ok so we never reveal whether an email has credits (no enumeration)
+  if (!email) return json({ ok: true });
+
+  const token = await env.HAULER_KV.get(`email:${email}`);
+  if (token && env.RESEND_API_KEY && env.EMAIL_FROM) {
+    try {
+      await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${env.RESEND_API_KEY}`, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          from: env.EMAIL_FROM,
+          to: email,
+          reply_to: env.REPLY_TO || undefined,
+          subject: 'Your SC Hauler Planner access token',
+          text: `Here is your access token for SC Hauler Planner:\n\n${token}\n\nOpen the planner, go to the Credits tab, click "I already have a token" and paste it in to reach your credits.\n\nKeep this safe, it is the key to your credits.`
+        })
+      });
+    } catch (_) { /* best effort */ }
+  }
+  return json({ ok: true });
 }
 
 // ============ HELPERS ============

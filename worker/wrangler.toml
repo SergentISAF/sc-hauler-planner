@@ -5,7 +5,12 @@ compatibility_date = "2026-05-01"
 # Set via: wrangler kv namespace create HAULER_KV
 # Then replace the id below with the one from the output.
 kv_namespaces = [
-  { binding = "HAULER_KV", id = "REPLACE_AFTER_KV_CREATE" }
+  { binding = "HAULER_KV", id = "c3cccbed085842cb945db722988a9b02" }
+]
+
+# Custom domain routing — Worker handles all /api/* paths on the domain.
+routes = [
+  { pattern = "scrapwavesurvivors.com/api/*", zone_name = "scrapwavesurvivors.com" }
 ]
 
 # Secrets — set via wrangler secret put <NAME>:
@@ -14,17 +19,14 @@ kv_namespaces = [
 #
 # Vars — edit values below as needed.
 [vars]
-ALLOWED_ORIGIN     = "https://scrapwavesurvivor.com"
-PUBLIC_URL         = "https://scrapwavesurvivor.com"
+ALLOWED_ORIGIN     = "https://scrapwavesurvivors.com"
+PUBLIC_URL         = "https://scrapwavesurvivors.com"
 CREDITS_PER_PACK   = "200"
 PACK_PRICE_CENTS   = "500"
 PACK_CURRENCY      = "eur"
 PACK_PRODUCT_NAME  = "SC Hauler Planner — 200 credits"
-SUPPORT_EMAIL      = "support@scrapwavesurvivor.com"
+SUPPORT_EMAIL      = "dev@scrapwavesurvivors.com"
 CLAUDE_MODEL       = "claude-sonnet-4-6"
-
-# Custom domain routing (set after Cloudflare Pages is connected to scrapwavesurvivor.com)
-# Worker handles all /api/* paths on the domain.
-routes = [
-  { pattern = "scrapwavesurvivor.com/api/*", zone_name = "scrapwavesurvivor.com" }
-]
+EMAIL_FROM         = "SC Hauler Planner <noreply@offoverdrive.com>"
+REPLY_TO           = "dev@scrapwavesurvivors.com"
+# RESEND_API_KEY sættes som secret: wrangler secret put RESEND_API_KEY

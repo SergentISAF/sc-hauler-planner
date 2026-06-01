@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SC Hauler Planner</title>
+<meta name="description" content="Screenshot your Star Citizen hauling contracts and get the route, the loading order and a checklist to fly. One tool, made by a hauler.">
+<style>
+  :root {
+    --bg: #060d16;
+    --bg-2: #0a1420;
+    --panel: #0f1d2e;
+    --line: #213750;
+    --line-bright: #305a82;
+    --cyan: #4FC3F7;
+    --cyan-bright: #8ee0ff;
+    --orange: #ff9c33;
+    --green: #54c66a;
+    --text: #e9eff6;
+    --dim: #91a6bd;
+    --dimmer: #5e768f;
+    --mono: ui-monospace, 'SF Mono', 'Consolas', 'Menlo', monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: var(--sans); font-size: 16px; line-height: 1.6; overflow-x: hidden;
+    background-image:
+      radial-gradient(900px 480px at 82% -12%, rgba(79,195,247,0.09), transparent 60%),
+      radial-gradient(700px 600px at -5% 8%, rgba(255,156,51,0.045), transparent 55%);
+  }
+  body::before {
+    content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background-image:
+      linear-gradient(rgba(48,90,130,0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(48,90,130,0.05) 1px, transparent 1px);
+    background-size: 48px 48px;
+    mask-image: linear-gradient(180deg, rgba(0,0,0,0.85), rgba(0,0,0,0.2) 70%, transparent);
+  }
+  .wrap { position: relative; z-index: 1; max-width: 1080px; margin: 0 auto; padding: 0 22px; }
+  a { color: var(--cyan); text-decoration: none; }
+  h1, h2, h3 { line-height: 1.15; margin: 0; letter-spacing: -0.01em; }
+
+  .eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 3px; text-transform: uppercase; color: var(--cyan); display: inline-flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+  .eyebrow::before { content: ''; width: 20px; height: 1px; background: var(--cyan); display: inline-block; box-shadow: 0 0 6px var(--cyan); }
+
+  .hud { position: relative; background: linear-gradient(160deg, var(--panel), var(--bg-2)); border: 1px solid var(--line); border-radius: 3px; }
+  .hud::before, .hud::after { content: ''; position: absolute; width: 13px; height: 13px; border: 2px solid var(--cyan); opacity: 0.5; }
+  .hud::before { top: -1px; left: -1px; border-right: none; border-bottom: none; }
+  .hud::after { bottom: -1px; right: -1px; border-left: none; border-top: none; }
+
+  .btn { display: inline-flex; align-items: center; gap: 9px; cursor: pointer; border: none; font-family: var(--sans); font-weight: 700; font-size: 15px; padding: 13px 22px; color: #03121c; background: var(--cyan); border-radius: 2px; clip-path: polygon(0 0, calc(100% - 11px) 0, 100% 11px, 100% 100%, 11px 100%, 0 calc(100% - 11px)); transition: transform .12s ease, box-shadow .15s ease, background .15s ease; }
+  .btn:hover { background: var(--cyan-bright); box-shadow: 0 6px 24px rgba(79,195,247,0.30); transform: translateY(-1px); }
+  .btn.ghost { background: transparent; color: var(--cyan); border: 1px solid var(--line-bright); }
+  .btn.ghost:hover { background: rgba(79,195,247,0.10); box-shadow: none; color: var(--cyan-bright); }
+
+  header { position: sticky; top: 0; z-index: 50; backdrop-filter: blur(10px); background: rgba(6,13,22,0.8); border-bottom: 1px solid var(--line); }
+  .nav { display: flex; align-items: center; gap: 18px; height: 62px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; letter-spacing: 0.4px; font-size: 15px; color: var(--text); }
+  .brand .mark { width: 28px; height: 28px; display: grid; place-items: center; font-family: var(--mono); font-weight: 700; font-size: 14px; color: #03121c; background: linear-gradient(135deg, var(--cyan-bright), var(--cyan)); border-radius: 5px; box-shadow: 0 0 12px rgba(79,195,247,0.45); }
+  .nav .spacer { flex: 1; }
+  .nav .links { display: flex; gap: 22px; }
+  .nav .links a { color: var(--dim); font-size: 14px; font-weight: 600; }
+  .nav .links a:hover { color: var(--text); }
+  .langsel { font-family: var(--mono); font-size: 12px; letter-spacing: 1px; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 2px; padding: 7px 8px; cursor: pointer; }
+  .langsel:focus { outline: 1px solid var(--cyan); }
+  .nav-toggle { display: none; background: none; border: 1px solid var(--line); color: var(--text); border-radius: 3px; padding: 7px 9px; cursor: pointer; }
+
+  .hero { padding: 76px 0 64px; }
+  .hero-grid { display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 44px; align-items: center; }
+  .hero h1 { font-size: clamp(34px, 5vw, 54px); font-weight: 800; }
+  .hero h1 b { color: var(--cyan); font-weight: 800; }
+  .hero p.lead { color: var(--dim); font-size: 18px; margin: 20px 0 30px; max-width: 520px; }
+  .hero .cta-row { display: flex; gap: 14px; flex-wrap: wrap; }
+  .hero .micro { margin-top: 22px; font-family: var(--mono); font-size: 12px; color: var(--dimmer); letter-spacing: 1px; }
+  .hero .micro b { color: var(--orange); }
+
+  .manifest { padding: 18px; font-family: var(--mono); font-size: 12.5px; }
+  .manifest .mhead { display: flex; justify-content: space-between; align-items: center; color: var(--dim); border-bottom: 1px solid var(--line); padding-bottom: 10px; margin-bottom: 12px; letter-spacing: 1px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); display: inline-block; box-shadow: 0 0 8px var(--green); animation: pulse 1.9s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.35} }
+  .mrow { display: grid; grid-template-columns: 22px 1fr auto; gap: 10px; padding: 6px 0; align-items: baseline; }
+  .mrow .ix { color: var(--cyan); }
+  .mrow .st { color: var(--text); }
+  .mrow .sc { color: var(--orange); }
+  .mrow .sub { grid-column: 2 / -1; color: var(--dimmer); font-size: 11px; }
+  .mfoot { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; display: flex; justify-content: space-between; color: var(--dim); }
+  .mfoot b { color: var(--cyan); }
+  .hero-shot { padding: 0; }
+  .hero-shot .shot-inner { max-height: 480px; overflow: hidden; border-radius: 3px; }
+  .hero-shot img { width: 100%; display: block; }
+  .showcase { padding: 0; margin-top: 22px; }
+  .showcase .shot-inner { overflow: hidden; border-radius: 3px; }
+  .showcase img { width: 100%; display: block; }
+  .gallery { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 24px; }
+  .gallery .thumb { padding: 0; cursor: zoom-in; background: var(--panel); border: 1px solid var(--line); transition: border-color .15s, transform .12s; }
+  .gallery .thumb:hover { border-color: var(--cyan); transform: translateY(-2px); }
+  .gallery .thumb .shot-inner { max-height: 160px; overflow: hidden; border-radius: 3px; }
+  .gallery .thumb img { width: 100%; display: block; }
+  .lightbox { position: fixed; inset: 0; z-index: 100; background: rgba(3,8,14,0.93); backdrop-filter: blur(5px); display: none; align-items: center; justify-content: center; padding: 32px; cursor: zoom-out; }
+  .lightbox.open { display: flex; }
+  .lightbox img { max-width: 92vw; max-height: 90vh; border: 1px solid var(--line-bright); border-radius: 4px; box-shadow: 0 0 70px rgba(0,0,0,0.7); }
+  .lightbox .close { position: absolute; top: 18px; right: 26px; color: var(--text); font-size: 26px; font-family: var(--mono); cursor: pointer; }
+  @media (max-width: 560px) { .gallery { grid-template-columns: 1fr; } }
+
+  section.block { padding: 60px 0; border-top: 1px solid rgba(33,55,80,0.5); }
+  .sec-head { max-width: 620px; margin-bottom: 36px; }
+  .sec-head h2 { font-size: clamp(25px, 3.2vw, 33px); font-weight: 800; }
+  .sec-head p { color: var(--dim); margin-top: 12px; }
+
+  .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  .step { padding: 20px 18px; }
+  .step .num { font-family: var(--mono); color: var(--cyan); font-size: 12px; letter-spacing: 2px; margin-bottom: 12px; }
+  .step h3 { font-size: 16px; margin-bottom: 8px; }
+  .step p { color: var(--dim); font-size: 14px; margin: 0; }
+
+  .ways { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .way { padding: 24px 22px; display: flex; flex-direction: column; }
+  .way .wt { font-size: 18px; font-weight: 800; margin-bottom: 4px; }
+  .way .wp { font-family: var(--mono); font-size: 13px; letter-spacing: 1px; margin-bottom: 12px; }
+  .way .wp.free { color: var(--green); }
+  .way .wp.paid { color: var(--cyan); }
+  .way .wp.self { color: var(--orange); }
+  .way p { color: var(--dim); font-size: 14px; flex: 1; margin: 0 0 18px; }
+  .way .badge { align-self: flex-start; font-family: var(--mono); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--orange); border: 1px solid rgba(255,156,51,0.4); border-radius: 2px; padding: 3px 7px; margin-bottom: 12px; }
+
+  .orgs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 13px; }
+  .org { padding: 17px 17px; display: flex; flex-direction: column; gap: 7px; transition: border-color .15s, transform .12s; }
+  .org:hover { border-color: var(--line-bright); transform: translateY(-2px); }
+  .org .tag { font-family: var(--mono); font-size: 11px; letter-spacing: 1px; color: var(--orange); }
+  .org h3 { font-size: 15px; }
+  .org .view { font-family: var(--mono); font-size: 12px; color: var(--cyan); margin-top: auto; }
+  .org-note { margin-top: 22px; color: var(--dimmer); font-size: 13px; max-width: 600px; border-left: 2px solid var(--line-bright); padding-left: 14px; }
+
+  .fbcta { padding: 34px 30px; display: flex; align-items: center; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
+  .fbcta h2 { font-size: 24px; }
+  .fbcta p { color: var(--dim); margin: 8px 0 0; max-width: 480px; }
+
+  footer { border-top: 1px solid var(--line); padding: 38px 0 54px; margin-top: 24px; }
+  .foot-grid { display: flex; justify-content: space-between; gap: 24px; flex-wrap: wrap; align-items: flex-start; }
+  .coffee { display: inline-flex; align-items: center; gap: 9px; background: #FFDD00; color: #1a1a1a; font-weight: 800; padding: 11px 18px; border-radius: 3px; clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px)); }
+  .coffee:hover { filter: brightness(1.05); }
+  .disclaimer { color: var(--dimmer); font-size: 12px; max-width: 540px; line-height: 1.6; margin-top: 18px; }
+  .foot-links { display: flex; flex-direction: column; gap: 8px; font-size: 14px; }
+  .foot-links a { color: var(--dim); }
+  .foot-links a:hover { color: var(--text); }
+  .built { font-family: var(--mono); font-size: 12px; color: var(--dimmer); letter-spacing: 1px; margin-top: 18px; }
+  .legal { font-family: var(--mono); font-size: 12px; color: var(--dimmer); letter-spacing: 0.5px; margin-top: 8px; }
+  .legal a { color: var(--dim); }
+  .legal a:hover { color: var(--cyan); }
+  .privacy { font-family: var(--mono); font-size: 12px; color: var(--green); letter-spacing: 0.5px; margin-top: 10px; opacity: 0.85; }
+  .privacy::before { content: '// '; color: var(--dimmer); }
+  .cur { animation: blink 1.1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  @media (max-width: 880px) {
+    .hero-grid { grid-template-columns: 1fr; gap: 30px; }
+    .steps { grid-template-columns: repeat(2, 1fr); }
+    .ways { grid-template-columns: 1fr; }
+    .orgs { grid-template-columns: repeat(2, 1fr); }
+    .nav .links { display: none; }
+    .nav .links.open { display: flex; position: absolute; top: 62px; left: 0; right: 0; flex-direction: column; background: var(--bg-2); border-bottom: 1px solid var(--line); padding: 16px 22px; gap: 14px; }
+    .nav-toggle { display: inline-block; }
+  }
+  @media (max-width: 560px) { .steps, .orgs { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap nav">
+    <a class="brand" href="#top"><span class="mark">&gt;<span class="cur">_</span></span><span>SC Hauler Planner</span></a>
+    <span class="spacer"></span>
+    <nav class="links" id="navlinks">
+      <a href="#how" data-i18n="nav_how">How it works</a>
+      <a href="#use" data-i18n="nav_use">Use it</a>
+      <a href="#orgs" data-i18n="nav_orgs">Orgs</a>
+      <a href="feedback.html" data-i18n="nav_feedback">Feedback</a>
+    </nav>
+    <select class="langsel" id="langsel" aria-label="Language">
+      <option value="en">EN</option><option value="da">DA</option><option value="de">DE</option>
+      <option value="fr">FR</option><option value="no">NO</option><option value="sv">SV</option><option value="fi">FI</option>
+    </select>
+    <a class="btn" href="../index.html" data-i18n="nav_launch">Open the planner</a>
+    <button class="nav-toggle" id="navtoggle" aria-label="Menu">☰</button>
+  </div>
+</header>
+
+<main id="top">
+
+<section class="hero">
+  <div class="wrap hero-grid">
+    <div>
+      <span class="eyebrow" data-i18n="hero_eyebrow">For Star Citizen haulers</span>
+      <h1 data-i18n-html="hero_title">Plan the run <b>before you undock</b></h1>
+      <p class="lead" data-i18n="hero_sub">Screenshot your hauling contracts. The app reads them and works out the route, the loading order, and a checklist you tick off while you fly.</p>
+      <div class="cta-row">
+        <a class="btn" href="../index.html" data-i18n="hero_cta1">Open the planner</a>
+        <a class="btn ghost" href="#how" data-i18n="hero_cta2">How it works</a>
+      </div>
+      <div class="micro" data-i18n-html="hero_micro">Runs in your browser. No install. <b>18 ships</b> in the database.</div>
+    </div>
+
+    <div class="hud manifest" aria-hidden="true">
+      <div class="mhead"><span>// ROUTE · HURSTON</span><span><span class="dot"></span> RSI HERMES</span></div>
+      <div class="mrow"><span class="ix">01</span><span class="st">Everus Harbor</span><span class="sc">START</span></div>
+      <div class="mrow"><span class="sub">pickup · Tungsten 96 SCU → HDPC-Farnesway</span></div>
+      <div class="mrow"><span class="ix">02</span><span class="st">HDPC-Farnesway</span><span class="sc">144 SCU</span></div>
+      <div class="mrow"><span class="sub">drop · Tungsten 96 · pickup · Aluminium 48</span></div>
+      <div class="mrow"><span class="ix">03</span><span class="st">Pinewood Tech Hub</span><span class="sc">96 SCU</span></div>
+      <div class="mrow"><span class="sub">drop · Aluminium 48 · Processed Food 48</span></div>
+      <div class="mfoot"><span>peak load <b>144 / 288 SCU</b></span><span>9 contracts</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="how">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow" data-i18n="how_eyebrow">Workflow</span>
+      <h2 data-i18n="how_title">Screenshots in, flight plan out</h2>
+    </div>
+    <div class="steps">
+      <div class="hud step"><div class="num">01</div><h3 data-i18n="s1t">Drop your contracts</h3><p data-i18n="s1d">Drag in screenshots of your contract screens. As many as you want.</p></div>
+      <div class="hud step"><div class="num">02</div><h3 data-i18n="s2t">It reads them</h3><p data-i18n="s2d">Claude pulls out every pickup, drop, commodity and SCU.</p></div>
+      <div class="hud step"><div class="num">03</div><h3 data-i18n="s3t">You get the route</h3><p data-i18n="s3d">Ordered to skip backtracking, with a LIFO loading map.</p></div>
+      <div class="hud step"><div class="num">04</div><h3 data-i18n="s4t">Fly the checklist</h3><p data-i18n="s4d">Tick off stops as you go. Earned aUEC updates live.</p></div>
+    </div>
+    <div class="gallery">
+      <button class="hud thumb" data-img="img/upload-parse.png"><div class="shot-inner"><img src="img/upload-parse.png" alt="Upload and parse contract screenshots"></div></button>
+      <button class="hud thumb" data-img="img/generated-plan.png"><div class="shot-inner"><img src="img/generated-plan.png" alt="Generated transport plan with LIFO cargo map"></div></button>
+      <button class="hud thumb" data-img="img/hosted-credits.png"><div class="shot-inner"><img src="img/hosted-credits.png" alt="Prepaid credits"></div></button>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="use">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow" data-i18n="use_eyebrow">Getting started</span>
+      <h2 data-i18n="use_title">Pick how you run it</h2>
+    </div>
+    <div class="ways">
+      <div class="hud way">
+        <span class="wt" data-i18n="way1_t">Buy credits</span>
+        <span class="wp paid" data-i18n="way1_p">€5 / 200 screenshots</span>
+        <p data-i18n="way1_d">Runs on my API key. Nothing to install, no account to make. Pay once, parse 200.</p>
+        <a class="btn" href="../index.html" data-i18n="way1_cta">Open the planner</a>
+      </div>
+      <div class="hud way">
+        <span class="wt" data-i18n="way2_t">Use your own key</span>
+        <span class="wp free" data-i18n="way2_p">Free</span>
+        <p data-i18n="way2_d">Paste your own Anthropic key. It stays in your browser and you pay Anthropic directly.</p>
+        <a class="btn ghost" href="../index.html" data-i18n="way2_cta">Open the planner</a>
+      </div>
+      <div class="hud way">
+        <span class="wt" data-i18n="way3_t">Run it yourself</span>
+        <span class="wp self" data-i18n="way3_p">Free · local</span>
+        <p data-i18n="way3_d">It is one HTML file. Grab it on GitHub and run it on your own PC.</p>
+        <a class="btn ghost" href="https://github.com/SergentISAF/sc-hauler-planner" target="_blank" rel="noopener" data-i18n="way3_cta">Get it on GitHub</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="orgs">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow" data-i18n="orgs_eyebrow">If you want a crew</span>
+      <h2 data-i18n="orgs_title">Hauling orgs worth a look</h2>
+    </div>
+    <div class="orgs">
+      <a class="hud org" href="https://robertsspaceindustries.com/en/orgs/convoy" target="_blank" rel="noopener"><span class="tag">[CONVOY]</span><h3>The Convoy™</h3><span class="view" data-i18n="org_view">View on RSI →</span></a>
+      <a class="hud org" href="https://robertsspaceindustries.com/en/orgs/haulers" target="_blank" rel="noopener"><span class="tag">[HAULERS]</span><h3>Galactic Haulers Guild</h3><span class="view" data-i18n="org_view">View on RSI →</span></a>
+      <a class="hud org" href="https://robertsspaceindustries.com/en/orgs/TGCLOG" target="_blank" rel="noopener"><span class="tag">[TGCLOG]</span><h3>TGC Logistics</h3><span class="view" data-i18n="org_view">View on RSI →</span></a>
+      <a class="hud org" href="https://robertsspaceindustries.com/en/orgs/HDSL" target="_blank" rel="noopener"><span class="tag">[HDSL]</span><h3>Congo Industrial Hauling</h3><span class="view" data-i18n="org_view">View on RSI →</span></a>
+      <a class="hud org" href="https://robertsspaceindustries.com/en/orgs/HIT" target="_blank" rel="noopener"><span class="tag">[HIT]</span><h3>Hauling Interstellar Transport</h3><span class="view" data-i18n="org_view">View on RSI →</span></a>
+      <a class="hud org" href="https://robertsspaceindustries.com/en/community/organizations" target="_blank" rel="noopener"><span class="tag">[+]</span><h3 data-i18n="org_more_t">Browse them all</h3><span class="view" data-i18n="org_more_v">All orgs on RSI →</span></a>
+    </div>
+    <p class="org-note" data-i18n="orgs_disclaimer">I'm not part of any of these orgs and I can't get you a spot. This is just a tip if you'd rather haul with a crew than fly solo.</p>
+  </div>
+</section>
+
+<section class="block">
+  <div class="wrap">
+    <div class="hud fbcta">
+      <div>
+        <h2 data-i18n="fb_title">Found a bug or want a feature?</h2>
+        <p data-i18n="fb_sub">Tell me what's broken and what you'd like next. Credit buyers get priority.</p>
+      </div>
+      <a class="btn" href="feedback.html" data-i18n="fb_cta">Send feedback</a>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<div class="lightbox" id="lightbox"><span class="close">✕</span><img id="lightbox-img" src="" alt=""></div>
+
+<footer>
+  <div class="wrap foot-grid">
+    <div>
+      <a class="coffee" href="https://buymeacoffee.com/danholmstad" target="_blank" rel="noopener">☕ <span data-i18n="footer_coffee">Buy me a coffee</span></a>
+      <p class="disclaimer" data-i18n-html="footer_disclaimer">Unofficial fan tool. Not affiliated with or endorsed by Cloud Imperium Games or Roberts Space Industries. Star Citizen® and Squadron 42® are registered trademarks of Cloud Imperium Rights LLC.</p>
+      <div class="built" data-i18n="footer_built">Made by a hauler</div>
+      <div class="legal">Holmstad Group ApS · CVR 44303663 · <a href="mailto:dev@scrapwavesurvivors.com">dev@scrapwavesurvivors.com</a></div>
+      <div class="privacy" data-i18n="footer_privacy">No cookies, no tracking. Your screenshots are parsed, not stored.</div>
+    </div>
+    <div class="foot-links">
+      <a href="../index.html" data-i18n="nav_launch">Open the planner</a>
+      <a href="#how" data-i18n="nav_how">How it works</a>
+      <a href="feedback.html" data-i18n="nav_feedback">Feedback</a>
+      <a href="https://github.com/SergentISAF/sc-hauler-planner" target="_blank" rel="noopener">GitHub</a>
+      <a href="mailto:dev@scrapwavesurvivors.com">dev@scrapwavesurvivors.com</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+const I18N = {
+  en: {
+    nav_how:"How it works", nav_use:"Use it", nav_orgs:"Orgs", nav_feedback:"Feedback", nav_launch:"Open the planner",
+    hero_eyebrow:"For Star Citizen haulers",
+    hero_title:"Plan the run <b>before you undock</b>",
+    hero_sub:"Screenshot your hauling contracts. The app reads them and works out the route, the loading order, and a checklist you tick off while you fly.",
+    hero_cta1:"Open the planner", hero_cta2:"How it works",
+    hero_micro:"Runs in your browser. No install. <b>18 ships</b> in the database.",
+    how_eyebrow:"Workflow", how_title:"Screenshots in, flight plan out",
+    s1t:"Drop your contracts", s1d:"Drag in screenshots of your contract screens. As many as you want.",
+    s2t:"It reads them", s2d:"Claude pulls out every pickup, drop, commodity and SCU.",
+    s3t:"You get the route", s3d:"Ordered to skip backtracking, with a LIFO loading map.",
+    s4t:"Fly the checklist", s4d:"Tick off stops as you go. Earned aUEC updates live.",
+    use_eyebrow:"Getting started", use_title:"Pick how you run it",
+    way1_badge:"Coming soon", way1_t:"Buy credits", way1_p:"€5 + VAT / 200 screenshots", way1_d:"Runs on my API key. Nothing to install, no account to make. Pay once, parse 200.", way1_cta:"Open the planner",
+    way2_t:"Use your own key", way2_p:"Free", way2_d:"Paste your own Anthropic key. It stays in your browser and you pay Anthropic directly.", way2_cta:"Open the planner",
+    way3_t:"Run it yourself", way3_p:"Free · local", way3_d:"It is one HTML file. Grab it on GitHub and run it on your own PC.", way3_cta:"Get it on GitHub",
+    orgs_eyebrow:"If you want a crew", orgs_title:"Hauling orgs worth a look",
+    org_view:"View on RSI →", org_more_t:"Browse them all", org_more_v:"All orgs on RSI →",
+    orgs_disclaimer:"I'm not part of any of these orgs and I can't get you a spot. This is just a tip if you'd rather haul with a crew than fly solo.",
+    fb_title:"Found a bug or want a feature?", fb_sub:"Tell me what's broken and what you'd like next. Credit buyers get priority.", fb_cta:"Send feedback",
+    footer_coffee:"Buy me a coffee",
+    footer_disclaimer:"Unofficial fan tool. Not affiliated with or endorsed by Cloud Imperium Games or Roberts Space Industries. Star Citizen® and Squadron 42® are registered trademarks of Cloud Imperium Rights LLC.",
+    footer_built:"Made by a hauler", footer_privacy:"No cookies, no tracking. Your screenshots are parsed, not stored."
+  },
+  da: {
+    nav_how:"Sådan virker det", nav_use:"Brug den", nav_orgs:"Orgs", nav_feedback:"Feedback", nav_launch:"Åbn planner",
+    hero_eyebrow:"Til Star Citizen-haulere",
+    hero_title:"Planlæg turen <b>før du letter</b>",
+    hero_sub:"Tag screenshots af dine hauling-kontrakter. Appen læser dem og finder ruten, lasterækkefølgen og en tjekliste du krydser af mens du flyver.",
+    hero_cta1:"Åbn planner", hero_cta2:"Sådan virker det",
+    hero_micro:"Kører i din browser. Ingen installation. <b>18 skibe</b> i databasen.",
+    how_eyebrow:"Arbejdsgang", how_title:"Screenshots ind, flyveplan ud",
+    s1t:"Smid kontrakterne ind", s1d:"Træk screenshots af dine kontraktskærme ind. Så mange du vil.",
+    s2t:"Den læser dem", s2d:"Claude henter hver pickup, levering, vare og SCU ud.",
+    s3t:"Du får ruten", s3d:"Sorteret så du undgår at køre frem og tilbage, med et LIFO-lastekort.",
+    s4t:"Flyv tjeklisten", s4d:"Kryds stop af undervejs. Optjent aUEC opdateres live.",
+    use_eyebrow:"Kom i gang", use_title:"Vælg hvordan du kører den",
+    way1_badge:"Kommer snart", way1_t:"Køb credits", way1_p:"€5 + moms / 200 screenshots", way1_d:"Kører på min API-nøgle. Intet at installere, ingen konto at lave. Betal én gang, parse 200.", way1_cta:"Åbn planner",
+    way2_t:"Brug din egen nøgle", way2_p:"Gratis", way2_d:"Indsæt din egen Anthropic-nøgle. Den bliver i din browser, og du betaler Anthropic direkte.", way2_cta:"Åbn planner",
+    way3_t:"Kør den selv", way3_p:"Gratis · lokalt", way3_d:"Det er én HTML-fil. Hent den på GitHub og kør den på din egen PC.", way3_cta:"Hent på GitHub",
+    orgs_eyebrow:"Hvis du vil have et crew", orgs_title:"Hauling-orgs værd at kigge på",
+    org_view:"Se på RSI →", org_more_t:"Se dem alle", org_more_v:"Alle orgs på RSI →",
+    orgs_disclaimer:"Jeg er ikke en del af nogen af disse orgs, og jeg kan ikke skaffe dig en plads. Det er bare et tip hvis du hellere vil haule sammen med et crew end flyve solo.",
+    fb_title:"Fundet en fejl eller ønsker du en funktion?", fb_sub:"Sig hvad der er i stykker, og hvad du gerne vil have næst. Dem der køber credits kommer først.", fb_cta:"Send feedback",
+    footer_coffee:"Køb mig en kaffe",
+    footer_disclaimer:"Uofficielt fan-værktøj. Ikke tilknyttet eller godkendt af Cloud Imperium Games eller Roberts Space Industries. Star Citizen® og Squadron 42® er registrerede varemærker tilhørende Cloud Imperium Rights LLC.",
+    footer_built:"Lavet af en hauler", footer_privacy:"Ingen cookies, ingen tracking. Dine screenshots bliver læst, ikke gemt."
+  },
+  de: {
+    nav_how:"So funktioniert es", nav_use:"Nutzen", nav_orgs:"Orgs", nav_feedback:"Feedback", nav_launch:"Planer öffnen",
+    hero_eyebrow:"Für Star-Citizen-Hauler",
+    hero_title:"Plane die Tour <b>vor dem Abdocken</b>",
+    hero_sub:"Mach Screenshots deiner Hauling-Verträge. Die App liest sie und ermittelt Route, Ladereihenfolge und eine Checkliste, die du beim Fliegen abhakst.",
+    hero_cta1:"Planer öffnen", hero_cta2:"So funktioniert es",
+    hero_micro:"Läuft im Browser. Keine Installation. <b>18 Schiffe</b> in der Datenbank.",
+    how_eyebrow:"Ablauf", how_title:"Screenshots rein, Flugplan raus",
+    s1t:"Verträge reinziehen", s1d:"Zieh Screenshots deiner Vertragsbildschirme rein. So viele du willst.",
+    s2t:"Sie liest sie", s2d:"Claude liest jede Abholung, Lieferung, Ware und SCU aus.",
+    s3t:"Du bekommst die Route", s3d:"Sortiert ohne Umwege, mit einem LIFO-Ladeplan.",
+    s4t:"Flieg die Checkliste", s4d:"Hak Stopps unterwegs ab. Verdiente aUEC aktualisieren sich live.",
+    use_eyebrow:"Loslegen", use_title:"Wähl, wie du sie nutzt",
+    way1_badge:"Bald", way1_t:"Credits kaufen", way1_p:"€5 + MwSt. / 200 Screenshots", way1_d:"Läuft über meinen API-Key. Nichts installieren, kein Konto. Einmal zahlen, 200 auslesen.", way1_cta:"Planer öffnen",
+    way2_t:"Eigener Key", way2_p:"Gratis", way2_d:"Füg deinen eigenen Anthropic-Key ein. Er bleibt im Browser, du zahlst direkt an Anthropic.", way2_cta:"Planer öffnen",
+    way3_t:"Selbst betreiben", way3_p:"Gratis · lokal", way3_d:"Es ist eine HTML-Datei. Hol sie dir auf GitHub und starte sie auf deinem PC.", way3_cta:"Auf GitHub holen",
+    orgs_eyebrow:"Wenn du eine Crew willst", orgs_title:"Hauling-Orgs, die einen Blick wert sind",
+    org_view:"Auf RSI ansehen →", org_more_t:"Alle durchsehen", org_more_v:"Alle Orgs auf RSI →",
+    orgs_disclaimer:"Ich gehöre zu keiner dieser Orgs und kann dir keinen Platz besorgen. Das ist nur ein Tipp, falls du lieber mit einer Crew haulst statt allein.",
+    fb_title:"Bug gefunden oder Wunsch?", fb_sub:"Sag mir, was kaputt ist und was du dir wünschst. Wer Credits kauft, kommt zuerst dran.", fb_cta:"Feedback senden",
+    footer_coffee:"Spendier mir einen Kaffee",
+    footer_disclaimer:"Inoffizielles Fan-Tool. Nicht mit Cloud Imperium Games oder Roberts Space Industries verbunden oder von ihnen unterstützt. Star Citizen® und Squadron 42® sind eingetragene Marken der Cloud Imperium Rights LLC.",
+    footer_built:"Von einem Hauler gemacht", footer_privacy:"Keine Cookies, kein Tracking. Deine Screenshots werden gelesen, nicht gespeichert."
+  },
+  fr: {
+    nav_how:"Comment ça marche", nav_use:"Utiliser", nav_orgs:"Orgs", nav_feedback:"Retour", nav_launch:"Ouvrir l'app",
+    hero_eyebrow:"Pour les hauleurs de Star Citizen",
+    hero_title:"Prépare la tournée <b>avant de décoller</b>",
+    hero_sub:"Capture tes contrats de hauling. L'app les lit et calcule la route, l'ordre de chargement et une checklist que tu coches en vol.",
+    hero_cta1:"Ouvrir l'app", hero_cta2:"Comment ça marche",
+    hero_micro:"Tourne dans le navigateur. Sans installation. <b>18 vaisseaux</b> en base.",
+    how_eyebrow:"Déroulé", how_title:"Captures en entrée, plan de vol en sortie",
+    s1t:"Dépose tes contrats", s1d:"Glisse les captures de tes écrans de contrats. Autant que tu veux.",
+    s2t:"Elle les lit", s2d:"Claude extrait chaque ramassage, livraison, marchandise et SCU.",
+    s3t:"Tu reçois la route", s3d:"Ordonnée pour éviter les allers-retours, avec un plan LIFO.",
+    s4t:"Suis la checklist", s4d:"Coche les arrêts en route. Les aUEC gagnés se mettent à jour en direct.",
+    use_eyebrow:"Pour commencer", use_title:"Choisis comment tu l'utilises",
+    way1_badge:"Bientôt", way1_t:"Acheter des crédits", way1_p:"5 € + TVA / 200 captures", way1_d:"Tourne sur ma clé API. Rien à installer, aucun compte. Tu paies une fois, tu lis 200.", way1_cta:"Ouvrir l'app",
+    way2_t:"Ta propre clé", way2_p:"Gratuit", way2_d:"Colle ta propre clé Anthropic. Elle reste dans ton navigateur, tu paies Anthropic directement.", way2_cta:"Ouvrir l'app",
+    way3_t:"Héberge-la toi-même", way3_p:"Gratuit · local", way3_d:"C'est un seul fichier HTML. Récupère-le sur GitHub et lance-le sur ton PC.", way3_cta:"Sur GitHub",
+    orgs_eyebrow:"Si tu veux un équipage", orgs_title:"Des orgs de hauling à regarder",
+    org_view:"Voir sur RSI →", org_more_t:"Toutes les voir", org_more_v:"Toutes les orgs sur RSI →",
+    orgs_disclaimer:"Je ne fais partie d'aucune de ces orgs et je ne peux pas t'y faire entrer. C'est juste un conseil si tu préfères hauler avec un équipage plutôt qu'en solo.",
+    fb_title:"Un bug ou une idée ?", fb_sub:"Dis-moi ce qui casse et ce que tu veux ensuite. Les acheteurs de crédits passent en premier.", fb_cta:"Envoyer un retour",
+    footer_coffee:"Offre-moi un café",
+    footer_disclaimer:"Outil de fan non officiel. Ni affilié ni approuvé par Cloud Imperium Games ou Roberts Space Industries. Star Citizen® et Squadron 42® sont des marques déposées de Cloud Imperium Rights LLC.",
+    footer_built:"Fait par un hauleur", footer_privacy:"Pas de cookies, pas de pistage. Tes captures sont lues, pas stockées."
+  },
+  no: {
+    nav_how:"Slik virker det", nav_use:"Bruk den", nav_orgs:"Orgs", nav_feedback:"Tilbakemelding", nav_launch:"Åpne planner",
+    hero_eyebrow:"Til Star Citizen-haulere",
+    hero_title:"Planlegg turen <b>før du letter</b>",
+    hero_sub:"Ta skjermbilder av hauling-kontraktene dine. Appen leser dem og finner ruta, lasterekkefølgen og en sjekkliste du krysser av mens du flyr.",
+    hero_cta1:"Åpne planner", hero_cta2:"Slik virker det",
+    hero_micro:"Kjører i nettleseren. Ingen installasjon. <b>18 skip</b> i databasen.",
+    how_eyebrow:"Arbeidsflyt", how_title:"Skjermbilder inn, flygeplan ut",
+    s1t:"Slipp inn kontraktene", s1d:"Dra inn skjermbilder av kontraktskjermene dine. Så mange du vil.",
+    s2t:"Den leser dem", s2d:"Claude henter ut hver henting, levering, vare og SCU.",
+    s3t:"Du får ruta", s3d:"Sortert så du slipper å kjøre fram og tilbake, med et LIFO-lastekart.",
+    s4t:"Fly sjekklista", s4d:"Kryss av stopp underveis. Opptjente aUEC oppdateres live.",
+    use_eyebrow:"Kom i gang", use_title:"Velg hvordan du kjører den",
+    way1_badge:"Kommer snart", way1_t:"Kjøp credits", way1_p:"€5 + mva / 200 skjermbilder", way1_d:"Kjører på min API-nøkkel. Ingenting å installere, ingen konto. Betal én gang, les 200.", way1_cta:"Åpne planner",
+    way2_t:"Bruk din egen nøkkel", way2_p:"Gratis", way2_d:"Lim inn din egen Anthropic-nøkkel. Den blir i nettleseren, og du betaler Anthropic direkte.", way2_cta:"Åpne planner",
+    way3_t:"Kjør den selv", way3_p:"Gratis · lokalt", way3_d:"Det er én HTML-fil. Hent den på GitHub og kjør den på din egen PC.", way3_cta:"Hent på GitHub",
+    orgs_eyebrow:"Hvis du vil ha et crew", orgs_title:"Hauling-orgs verdt et blikk",
+    org_view:"Se på RSI →", org_more_t:"Se alle", org_more_v:"Alle orgs på RSI →",
+    orgs_disclaimer:"Jeg er ikke med i noen av disse orgsene, og jeg kan ikke skaffe deg en plass. Det er bare et tips hvis du heller vil haule sammen med et crew enn å fly alene.",
+    fb_title:"Funnet en feil eller ønsker du noe?", fb_sub:"Si hva som er ødelagt og hva du vil ha neste. De som kjøper credits kommer først.", fb_cta:"Send tilbakemelding",
+    footer_coffee:"Kjøp meg en kaffe",
+    footer_disclaimer:"Uoffisielt fan-verktøy. Ikke tilknyttet eller godkjent av Cloud Imperium Games eller Roberts Space Industries. Star Citizen® og Squadron 42® er registrerte varemerker som tilhører Cloud Imperium Rights LLC.",
+    footer_built:"Laget av en hauler", footer_privacy:"Ingen cookies, ingen sporing. Skjermbildene dine blir lest, ikke lagret."
+  },
+  sv: {
+    nav_how:"Så funkar det", nav_use:"Använd den", nav_orgs:"Orgs", nav_feedback:"Feedback", nav_launch:"Öppna planner",
+    hero_eyebrow:"För Star Citizen-haulers",
+    hero_title:"Planera turen <b>innan du lättar</b>",
+    hero_sub:"Ta skärmbilder av dina hauling-kontrakt. Appen läser dem och räknar ut rutten, lastordningen och en checklista du bockar av medan du flyger.",
+    hero_cta1:"Öppna planner", hero_cta2:"Så funkar det",
+    hero_micro:"Körs i webbläsaren. Ingen installation. <b>18 skepp</b> i databasen.",
+    how_eyebrow:"Arbetsflöde", how_title:"Skärmbilder in, flygplan ut",
+    s1t:"Släpp in kontrakten", s1d:"Dra in skärmbilder av dina kontraktsskärmar. Så många du vill.",
+    s2t:"Den läser dem", s2d:"Claude plockar ut varje upphämtning, leverans, vara och SCU.",
+    s3t:"Du får rutten", s3d:"Sorterad så du slipper åka fram och tillbaka, med en LIFO-lastkarta.",
+    s4t:"Flyg checklistan", s4d:"Bocka av stopp längs vägen. Intjänade aUEC uppdateras live.",
+    use_eyebrow:"Kom igång", use_title:"Välj hur du kör den",
+    way1_badge:"Kommer snart", way1_t:"Köp credits", way1_p:"€5 + moms / 200 skärmbilder", way1_d:"Körs på min API-nyckel. Inget att installera, inget konto. Betala en gång, läs 200.", way1_cta:"Öppna planner",
+    way2_t:"Använd din egen nyckel", way2_p:"Gratis", way2_d:"Klistra in din egen Anthropic-nyckel. Den stannar i webbläsaren och du betalar Anthropic direkt.", way2_cta:"Öppna planner",
+    way3_t:"Kör den själv", way3_p:"Gratis · lokalt", way3_d:"Det är en HTML-fil. Hämta den på GitHub och kör den på din egen PC.", way3_cta:"Hämta på GitHub",
+    orgs_eyebrow:"Om du vill ha en crew", orgs_title:"Hauling-orgs värda en titt",
+    org_view:"Se på RSI →", org_more_t:"Se alla", org_more_v:"Alla orgs på RSI →",
+    orgs_disclaimer:"Jag är inte med i någon av dessa orgs och jag kan inte fixa dig en plats. Det är bara ett tips om du hellre haular med en crew än flyger solo.",
+    fb_title:"Hittat en bugg eller vill ha en funktion?", fb_sub:"Säg vad som är trasigt och vad du vill ha härnäst. De som köper credits går först.", fb_cta:"Skicka feedback",
+    footer_coffee:"Bjud mig på en kaffe",
+    footer_disclaimer:"Inofficiellt fan-verktyg. Inte anslutet till eller godkänt av Cloud Imperium Games eller Roberts Space Industries. Star Citizen® och Squadron 42® är registrerade varumärken som tillhör Cloud Imperium Rights LLC.",
+    footer_built:"Gjord av en hauler", footer_privacy:"Inga cookies, ingen spårning. Dina skärmbilder läses men sparas inte."
+  },
+  fi: {
+    nav_how:"Näin se toimii", nav_use:"Käytä", nav_orgs:"Orgs", nav_feedback:"Palaute", nav_launch:"Avaa planner",
+    hero_eyebrow:"Star Citizen -haulereille",
+    hero_title:"Suunnittele reissu <b>ennen irtautumista</b>",
+    hero_sub:"Ota kuvakaappaukset hauling-sopimuksistasi. Sovellus lukee ne ja laskee reitin, lastausjärjestyksen ja tarkistuslistan, jonka kuittaat lennon aikana.",
+    hero_cta1:"Avaa planner", hero_cta2:"Näin se toimii",
+    hero_micro:"Toimii selaimessa. Ei asennusta. <b>18 alusta</b> tietokannassa.",
+    how_eyebrow:"Työnkulku", how_title:"Kuvakaappaukset sisään, lentosuunnitelma ulos",
+    s1t:"Pudota sopimukset", s1d:"Raahaa sopimusnäyttöjesi kuvakaappaukset sisään. Niin monta kuin haluat.",
+    s2t:"Se lukee ne", s2d:"Claude poimii jokaisen noudon, toimituksen, hyödykkeen ja SCU:n.",
+    s3t:"Saat reitin", s3d:"Järjestetty ilman edestakaisin ajoa, mukana LIFO-lastauskartta.",
+    s4t:"Lennä tarkistuslista", s4d:"Kuittaa pysähdykset matkalla. Ansaitut aUEC päivittyvät reaaliajassa.",
+    use_eyebrow:"Aloitus", use_title:"Valitse miten käytät sitä",
+    way1_badge:"Tulossa", way1_t:"Osta krediittejä", way1_p:"€5 + alv / 200 kuvakaappausta", way1_d:"Toimii minun API-avaimellani. Ei asennettavaa, ei tiliä. Maksa kerran, lue 200.", way1_cta:"Avaa planner",
+    way2_t:"Oma avain", way2_p:"Ilmainen", way2_d:"Liitä oma Anthropic-avaimesi. Se pysyy selaimessasi ja maksat Anthropicille suoraan.", way2_cta:"Avaa planner",
+    way3_t:"Aja itse", way3_p:"Ilmainen · paikallinen", way3_d:"Se on yksi HTML-tiedosto. Hae se GitHubista ja aja omalla koneellasi.", way3_cta:"Hae GitHubista",
+    orgs_eyebrow:"Jos haluat miehistön", orgs_title:"Katsomisen arvoisia hauling-orgeja",
+    org_view:"Katso RSI:ssä →", org_more_t:"Selaa kaikkia", org_more_v:"Kaikki orgit RSI:ssä →",
+    orgs_disclaimer:"En kuulu mihinkään näistä orgeista enkä voi järjestää sinulle paikkaa. Tämä on vain vinkki, jos haluat mieluummin haulata miehistön kanssa kuin yksin.",
+    fb_title:"Löysitkö bugin tai haluatko ominaisuuden?", fb_sub:"Kerro mikä on rikki ja mitä haluat seuraavaksi. Krediittien ostajat etusijalla.", fb_cta:"Lähetä palautetta",
+    footer_coffee:"Osta minulle kahvi",
+    footer_disclaimer:"Epävirallinen fanityökalu. Ei sidoksissa Cloud Imperium Gamesiin tai Roberts Space Industriesiin eikä niiden hyväksymä. Star Citizen® ja Squadron 42® ovat Cloud Imperium Rights LLC:n rekisteröityjä tavaramerkkejä.",
+    footer_built:"Haulerin tekemä", footer_privacy:"Ei evästeitä, ei seurantaa. Kuvakaappauksesi luetaan, ei tallenneta."
+  }
+};
+
+function applyLang(lang) {
+  const dict = I18N[lang] || I18N.en;
+  document.documentElement.lang = lang;
+  document.querySelectorAll('[data-i18n]').forEach(el => { const k = el.getAttribute('data-i18n'); if (dict[k] != null) el.textContent = dict[k]; });
+  document.querySelectorAll('[data-i18n-html]').forEach(el => { const k = el.getAttribute('data-i18n-html'); if (dict[k] != null) el.innerHTML = dict[k]; });
+  localStorage.setItem('swp-lang', lang);
+  const sel = document.getElementById('langsel'); if (sel) sel.value = lang;
+}
+function initLang() {
+  const saved = localStorage.getItem('swp-lang');
+  const browser = (navigator.language || 'en').slice(0,2).toLowerCase();
+  const supported = Object.keys(I18N);
+  applyLang(saved || (supported.includes(browser) ? browser : 'en'));
+}
+document.getElementById('langsel').addEventListener('change', e => applyLang(e.target.value));
+document.getElementById('navtoggle').addEventListener('click', () => document.getElementById('navlinks').classList.toggle('open'));
+document.querySelectorAll('#navlinks a').forEach(a => a.addEventListener('click', () => document.getElementById('navlinks').classList.remove('open')));
+initLang();
+
+// Lightbox for the workflow screenshots
+const lb = document.getElementById('lightbox');
+const lbImg = document.getElementById('lightbox-img');
+document.querySelectorAll('.gallery .thumb').forEach(t => t.addEventListener('click', () => {
+  lbImg.src = t.dataset.img;
+  lb.classList.add('open');
+}));
+lb.addEventListener('click', () => lb.classList.remove('open'));
+document.addEventListener('keydown', e => { if (e.key === 'Escape') lb.classList.remove('open'); });
+</script>
+
+</body>
+</html>

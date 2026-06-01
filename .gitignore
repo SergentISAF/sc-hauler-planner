@@ -19,3 +19,6 @@ desktop.ini
 .env.local
 *.key
 api-keys.txt
+
+# Wrangler local state
+.wrangler/
