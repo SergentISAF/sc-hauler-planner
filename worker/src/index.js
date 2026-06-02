@@ -163,6 +163,7 @@ async function handleBuy(request, env) {
 
   if (!stripeResp.ok) {
     const errText = await stripeResp.text();
+    await notify(env, `Hauler: Stripe ${stripeResp.status}`, `A customer checkout failed to create. ${errText.slice(0, 300)}`);
     return json({ error: `stripe ${stripeResp.status}: ${errText.slice(0, 200)}` }, 502);
   }
 
