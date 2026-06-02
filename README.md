@@ -54,6 +54,18 @@ Clone the repo or [download `index.html`](https://raw.githubusercontent.com/Serg
 
 Want your own paid instance with Stripe credits? See [DEPLOY.md](DEPLOY.md) for the full guide, and `deploy.sh` for the one-command build and deploy.
 
+## Roadmap
+
+- [x] Persistent contract library (keep parsed contracts across sessions)
+- [x] Cloudflare Pages deployment under its own domain
+- [x] Backend proxy with prepaid credits (no API key needed)
+- [ ] Server-side contract library sync (across devices)
+- [ ] Ship-grid visualisations for C2, Caterpillar and Hull series
+- [ ] Geographic route optimisation (distance between stations)
+- [ ] Multi-player crew mode (shared cargo, task assignment)
+- [ ] Reward / SCU ratio statistics (is this run worth taking?)
+- [ ] Mobile-responsive layout
+
 ## Disclaimer
 
 This is an unofficial fan tool. It is not affiliated with or endorsed by Cloud Imperium Games or Roberts Space Industries. Star Citizen® and Squadron 42® are registered trademarks of Cloud Imperium Rights LLC.
