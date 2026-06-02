@@ -129,19 +129,26 @@ async function handleParse(request, env) {
 }
 
 async function handleBuy(request, env) {
+  // Pick the pack: 'small' (50/€2) or 'large' (200/€5, default)
+  const body = await request.json().catch(() => ({}));
+  const small = body.pack === 'small';
+  const credits = small ? (env.SMALL_CREDITS || '50') : (env.CREDITS_PER_PACK || '200');
+  const priceCents = small ? (env.SMALL_PRICE_CENTS || '200') : (env.PACK_PRICE_CENTS || '500');
+  const productName = `SC Hauler Planner — ${credits} credits`;
+
   // Create Stripe Checkout Session
   const form = new URLSearchParams();
   form.append('mode', 'payment');
   form.append('payment_method_types[]', 'card');
   form.append('line_items[0][price_data][currency]', env.PACK_CURRENCY);
-  form.append('line_items[0][price_data][product_data][name]', env.PACK_PRODUCT_NAME);
-  form.append('line_items[0][price_data][unit_amount]', env.PACK_PRICE_CENTS);
-  form.append('line_items[0][price_data][tax_behavior]', 'exclusive'); // €5 is net; VAT is added on top at checkout
+  form.append('line_items[0][price_data][product_data][name]', productName);
+  form.append('line_items[0][price_data][unit_amount]', priceCents);
+  form.append('line_items[0][price_data][tax_behavior]', 'exclusive'); // price is net; VAT is added on top at checkout
   form.append('line_items[0][quantity]', '1');
   form.append('automatic_tax[enabled]', 'true'); // Stripe Tax computes VAT from customer location
   form.append('success_url', `${env.PUBLIC_URL}/app/?claim={CHECKOUT_SESSION_ID}`);
   form.append('cancel_url', `${env.PUBLIC_URL}/app/`);
-  form.append('metadata[credits]', env.CREDITS_PER_PACK);
+  form.append('metadata[credits]', credits);
 
   const stripeResp = await fetch('https://api.stripe.com/v1/checkout/sessions', {
     method: 'POST',

@@ -236,8 +236,13 @@
   <div id="paid-mode-section">
     <div id="paid-no-token">
       <div class="price-card">
+        <div class="price-head">€2 + VAT · 50 credits</div>
+        <div class="price-sub">Try it. 1 credit = 1 contract screenshot parsed.</div>
+        <button id="buy-small-btn">Buy 50 credits</button>
+      </div>
+      <div class="price-card">
         <div class="price-head">€5 + VAT · 200 credits</div>
-        <div class="price-sub">1 credit = 1 contract screenshot parsed. No subscription, no expiry. Pay once, parse 200.</div>
+        <div class="price-sub">Best value. No subscription, no expiry.</div>
         <button id="buy-btn">Buy 200 credits</button>
       </div>
       <details style="margin-top:10px">
@@ -251,6 +256,7 @@
     <div id="paid-with-token" style="display:none">
       <div class="row">
         <span class="credits-display">⚡ <strong id="credits-count">0</strong> credits left</span>
+        <button id="buy-more-small-btn" class="secondary">Buy 50 more</button>
         <button id="buy-more-btn">Buy 200 more</button>
         <button id="forget-token-btn" class="secondary">Sign out</button>
       </div>
@@ -403,8 +409,12 @@ function setupModeUI() {
       setMode(t.dataset.mode);
     });
   });
-  document.getElementById('buy-btn').addEventListener('click', startCheckout);
-  document.getElementById('buy-more-btn').addEventListener('click', startCheckout);
+  document.getElementById('buy-btn').addEventListener('click', () => startCheckout('large'));
+  document.getElementById('buy-more-btn').addEventListener('click', () => startCheckout('large'));
+  const buySmallBtn = document.getElementById('buy-small-btn');
+  if (buySmallBtn) buySmallBtn.addEventListener('click', () => startCheckout('small'));
+  const buyMoreSmallBtn = document.getElementById('buy-more-small-btn');
+  if (buyMoreSmallBtn) buyMoreSmallBtn.addEventListener('click', () => startCheckout('small'));
   const copyTokenBtn = document.getElementById('copy-token-btn');
   if (copyTokenBtn) copyTokenBtn.addEventListener('click', () => {
     const t = localStorage.getItem(STORAGE.token) || '';
@@ -485,13 +495,13 @@ async function fetchCredits(token) {
   return j.credits;
 }
 
-async function startCheckout() {
+async function startCheckout(pack) {
   if (!CREDITS_ENABLED) {
-    alert('Prepaid credits launch soon. For now, use "Bring your own key" — it is free with your own Anthropic key.');
+    alert('Prepaid credits launch soon. For now, use "Bring your own key", it is free with your own Anthropic key.');
     return;
   }
   try {
-    const r = await fetch(`${API_BASE}/api/buy`, { method: 'POST' });
+    const r = await fetch(`${API_BASE}/api/buy`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pack: pack === 'small' ? 'small' : 'large' }) });
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || 'failed');
     window.location.href = j.url;
