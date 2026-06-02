@@ -100,6 +100,7 @@ async function handleParse(request, env) {
     // Refund on network failure
     credit.credits += 1;
     await env.HAULER_KV.put(`token:${token}`, JSON.stringify(credit));
+    await notify(env, 'Hauler: Anthropic unreachable', 'A customer parse failed (upstream fetch threw). Credit refunded.');
     return json({ error: 'upstream unreachable' }, 502);
   }
 
@@ -108,6 +109,7 @@ async function handleParse(request, env) {
     credit.credits += 1;
     await env.HAULER_KV.put(`token:${token}`, JSON.stringify(credit));
     const errText = await claudeResp.text();
+    await notify(env, `Hauler: Anthropic ${claudeResp.status}`, `A customer parse failed (credit refunded). Likely funds/cap/key if 400/402/429. ${errText.slice(0, 300)}`);
     return json({ error: `claude api ${claudeResp.status}: ${errText.slice(0, 200)}` }, 502);
   }
 
@@ -288,6 +290,14 @@ async function handleRecover(request, env) {
     } catch (_) { /* best effort */ }
   }
   return json({ ok: true });
+}
+
+// Best-effort push alert via ntfy (set NTFY_URL). Used for runtime failures.
+async function notify(env, title, body) {
+  if (!env.NTFY_URL) return;
+  try {
+    await fetch(env.NTFY_URL, { method: 'POST', headers: { 'Title': title, 'Priority': 'high', 'Tags': 'warning' }, body });
+  } catch (_) { /* never let alerting break the request */ }
 }
 
 // ============ HELPERS ============
