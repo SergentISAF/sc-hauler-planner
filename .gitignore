@@ -25,3 +25,7 @@ api-keys.txt
 
 # Built site bundle
 dist/
+
+# local 3D prototype — never deploy or push
+sandbox/
+dist/
