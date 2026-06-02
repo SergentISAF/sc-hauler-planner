@@ -488,7 +488,7 @@ window.initCargo3D = async function(plan, appShip){
     <span class="lbl">System</span>
     <select id="system-select">
       <option value="stanton">Stanton</option>
-      <option value="pyro" disabled>Pyro (coming soon)</option>
+      <option value="pyro">Pyro</option>
     </select>
   </label>
 
@@ -627,10 +627,12 @@ async function initUI() {
 
   // location datalist + distance settings
   const locList = document.getElementById('loc-list');
-  if (locList) locList.innerHTML = STANTON_LOCATIONS.map(l => `<option value="${l}">`).join('');
   const sysSel = document.getElementById('system-select');
+  const fillLocs = () => { const sys = SYSTEMS[(sysSel && sysSel.value) || 'stanton'] || SYSTEMS.stanton;
+    if (locList) locList.innerHTML = (sys.locations || []).map(l => `<option value="${l}">`).join(''); };
   if (sysSel) { sysSel.value = localStorage.getItem('sc-tp-system') || 'stanton';
-    sysSel.addEventListener('change', e => localStorage.setItem('sc-tp-system', e.target.value)); }
+    sysSel.addEventListener('change', e => { localStorage.setItem('sc-tp-system', e.target.value); fillLocs(); }); }
+  fillLocs();
   const optChk = document.getElementById('optimize-distance');
   if (optChk) { const v = localStorage.getItem('sc-tp-optimize'); optChk.checked = (v === null ? true : v === 'true');
     optChk.addEventListener('change', e => localStorage.setItem('sc-tp-optimize', e.target.checked)); }
@@ -1067,25 +1069,44 @@ function buildStationAliases(contracts, startStation) {
 // Approximate body positions (Gm) so the route can group stops by planet/moon
 // and order them by travel distance. Stations resolve to a parent body.
 const SYSTEMS = {
-  stanton: { label: 'Stanton', bodies: {
-    Star:[0,0], Hurston:[12.9,0], Crusader:[-13.5,13.6], ArcCorp:[4,-28.6], microTech:[30,31.4]
-  }},
+  stanton: {
+    label: 'Stanton',
+    bodies: { Star:[0,0], Hurston:[12.9,0], Crusader:[-13.5,13.6], ArcCorp:[4,-28.6], microTech:[30,31.4] },
+    rules: [
+      [/hdms-|hdpc-|everus harbor|lorville|teasa|orinth|\bs1dc|hurston/, 'Hurston'],
+      [/baijini|area\s?18|arccorp|\bs3dc|lyria|wala/, 'ArcCorp'],
+      [/port tressler|new babbage|microtech|\bs4dc|calliope|clio|euterpe|rayari/, 'microTech'],
+      [/cru-l\d|orison|seraphim|grim ?hex|crusader|cellin|daymar|yela|\bs2dc/, 'Crusader'],
+    ],
+    locations: ['Everus Harbor','Baijini Point','Port Tressler','Seraphim Station','CRU-L1','Area18',
+      'New Babbage','Lorville','Teasa Spaceport','Orison','Grim HEX','HDMS-Oparei','HDMS-Hadley',
+      'HDMS-Edmond','HDPC-Cassillo','HDPC-Farnesway'],
+  },
+  pyro: {
+    label: 'Pyro',
+    // Approximate positions (Gm). Pyro location data is rougher than Stanton — easy to refine.
+    bodies: { Star:[0,0], 'Pyro I':[5,0], Monox:[-7,6], Bloom:[10,-9], 'Pyro IV':[-15,-12],
+      'Pyro V':[24,18], 'Pyro VI':[-30,28], Starlight:[16,-2] },
+    rules: [
+      [/ruin station|terminus|pyro vi|pyro 6/, 'Pyro VI'],
+      [/checkmate|orbituary|patch city|rod'?s|gaslight|rustville|dudley|bueno|sacren|chawla|last landing|rappel|pyro v\b|pyro 5|ignis|adir|fairo|fuego|vatra|vuur/, 'Pyro V'],
+      [/starlight/, 'Starlight'],
+      [/monox|pyro ii\b|pyro 2/, 'Monox'],
+      [/bloom|pyro iii|pyro 3/, 'Bloom'],
+      [/pyro iv|pyro 4/, 'Pyro IV'],
+      [/pyro i\b|pyro 1/, 'Pyro I'],
+    ],
+    locations: ['Ruin Station','Checkmate Station','Orbituary','Starlight Service Station','Patch City',
+      "Rod's Fuel & Supplies",'Rustville','Dudley & Daughters','Gaslight',"Chawla's Beach",'Last Landing','Bueno Ravine'],
+  },
 };
-const STANTON_LOCATIONS = [
-  'Everus Harbor','Baijini Point','Port Tressler','Seraphim Station','CRU-L1','Area18',
-  'New Babbage','Lorville','Teasa Spaceport','Orison','Grim HEX','HDMS-Oparei','HDMS-Hadley',
-  'HDMS-Edmond','HDPC-Cassillo','HDPC-Farnesway'
-];
 function locDist(a,b){ const dx=a[0]-b[0], dy=a[1]-b[1]; return Math.sqrt(dx*dx+dy*dy); }
 function locJitter(name){ let h=0; for(let i=0;i<name.length;i++) h=(h*31+name.charCodeAt(i))>>>0;
   return [((h%100)/100-0.5)*0.6, (((h>>7)%100)/100-0.5)*0.6]; }
 function locateStation(name, sys){
   sys = sys || SYSTEMS.stanton; const B = sys.bodies; const n = (name||'').toLowerCase();
   let body = 'Star';
-  if (/hdms-|hdpc-|everus harbor|lorville|teasa|orinth|\bs1dc|hurston/.test(n)) body='Hurston';
-  else if (/baijini|area\s?18|arccorp|\bs3dc|lyria|wala/.test(n)) body='ArcCorp';
-  else if (/port tressler|new babbage|microtech|\bs4dc|calliope|clio|euterpe|rayari/.test(n)) body='microTech';
-  else if (/cru-l\d|orison|seraphim|grim ?hex|crusader|cellin|daymar|yela|\bs2dc/.test(n)) body='Crusader';
+  for (const [re, b] of (sys.rules || [])) { if (re.test(n)) { body = b; break; } }
   const base = B[body] || B.Star; const j = locJitter(name||'');
   return { body, pos:[base[0]+j[0], base[1]+j[1]] };
 }
