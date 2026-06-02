@@ -1071,16 +1071,40 @@ function buildStationAliases(contracts, startStation) {
 const SYSTEMS = {
   stanton: {
     label: 'Stanton',
-    bodies: { Star:[0,0], Hurston:[12.9,0], Crusader:[-13.5,13.6], ArcCorp:[4,-28.6], microTech:[30,31.4] },
+    // Real-ish orbital radii (Gm) at distinct angles; moons sit just off their planet.
+    bodies: {
+      Star:[0,0],
+      Hurston:[12.85,0], Aberdeen:[13.3,0.25], Arial:[13.1,-0.45], Ita:[12.5,0.4], Magda:[12.4,-0.25],
+      Crusader:[-2.2,18.9], Yela:[-2.6,18.5], Daymar:[-1.8,18.6], Cellin:[-1.9,19.3],
+      ArcCorp:[-25.0,-14.5], Lyria:[-24.6,-14.2], Wala:[-25.4,-14.2],
+      microTech:[33.3,-27.9], Calliope:[33.7,-27.6], Clio:[32.9,-27.6], Euterpe:[33.6,-28.3],
+    },
     rules: [
+      // confirmed HDMS station -> Hurston moon (per wiki)
+      [/hdms-(anderson|norgaard)/, 'Aberdeen'],
+      [/hdms-(bezdek|lathan)/, 'Arial'],
+      [/hdms-(ryder|woodruff)/, 'Ita'],
+      [/hdms-(hahn|perlman)/, 'Magda'],
+      // Crusader moons
+      [/grim ?hex|\byela\b/, 'Yela'],
+      [/\bdaymar\b/, 'Daymar'],
+      [/\bcellin\b/, 'Cellin'],
+      // ArcCorp moons
+      [/\blyria\b/, 'Lyria'],
+      [/\bwala\b/, 'Wala'],
+      // microTech moons
+      [/\bcalliope\b/, 'Calliope'],
+      [/\bclio\b/, 'Clio'],
+      [/\beuterpe\b/, 'Euterpe'],
+      // planet-level catch-alls (other HDMS-* stay near Hurston)
       [/hdms-|hdpc-|everus harbor|lorville|teasa|orinth|\bs1dc|hurston/, 'Hurston'],
-      [/baijini|area\s?18|arccorp|\bs3dc|lyria|wala/, 'ArcCorp'],
-      [/port tressler|new babbage|microtech|\bs4dc|calliope|clio|euterpe|rayari/, 'microTech'],
-      [/cru-l\d|orison|seraphim|grim ?hex|crusader|cellin|daymar|yela|\bs2dc/, 'Crusader'],
+      [/baijini|area\s?18|arccorp|\bs3dc/, 'ArcCorp'],
+      [/port tressler|new babbage|microtech|\bs4dc|rayari/, 'microTech'],
+      [/cru-l\d|orison|seraphim|crusader|\bs2dc/, 'Crusader'],
     ],
     locations: ['Everus Harbor','Baijini Point','Port Tressler','Seraphim Station','CRU-L1','Area18',
       'New Babbage','Lorville','Teasa Spaceport','Orison','Grim HEX','HDMS-Oparei','HDMS-Hadley',
-      'HDMS-Edmond','HDPC-Cassillo','HDPC-Farnesway'],
+      'HDMS-Edmond','HDMS-Anderson','HDMS-Bezdek','HDMS-Ryder','HDMS-Hahn','HDPC-Cassillo','HDPC-Farnesway'],
   },
   pyro: {
     label: 'Pyro',
