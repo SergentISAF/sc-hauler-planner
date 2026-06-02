@@ -220,6 +220,196 @@
   .cargo-layer-dest { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
   .cargo-zone-total { font-size: 11px; color: var(--text-dim); text-align: center; margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--border); }
 </style>
+
+<style>
+  #cargo3d { height:460px; border-radius:6px; overflow:hidden; background:var(--bg); }
+  .c3d-label { color:var(--accent); font-size:13px; font-weight:bold; text-shadow:0 0 4px #000,0 0 4px #000; pointer-events:none; white-space:nowrap; }
+  .c3d-msg { padding:24px; color:var(--text-dim); text-align:center; }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+// ===== 3D cargo grid viewer (preview) — exposes window.initCargo3D(plan, ship) =====
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+
+const CONTAINER_DIMS = { 1:{w:1,d:1,h:1}, 2:{w:2,d:1,h:1}, 4:{w:2,d:2,h:1}, 8:{w:2,d:2,h:2}, 16:{w:4,d:2,h:2}, 32:{w:8,d:2,h:2} };
+const PALETTE = [0x4FC3F7,0xff9c33,0x7ee787,0xff7b9c,0xb392f0,0xffd866,0x6fd1c3,0xff9e64];
+const CS = 0.72;
+
+function decompose(total, boxScu) { const cap=boxScu||1; const o=[]; let r=total; for(const s of [32,16,8,4,2,1]){ if(s>cap) continue; while(r>=s){ o.push({...(CONTAINER_DIMS[s]||CONTAINER_DIMS[1]),scu:s}); r-=s; } } return o; }
+function maxFittingBox(ship){ for(const S of [32,16,8,4,2,1]){const b=CONTAINER_DIMS[S]; if(ship.grids.some(g=>(!g.maxSize||S<=g.maxSize)&&b.h<=g.h&&((b.w<=g.w&&b.d<=g.l)||(b.d<=g.w&&b.w<=g.l))))return S;} return 1; }
+function destColours(ds){ const m={};let i=0; for(const d of ds) if(!(d.delivery in m)) m[d.delivery]=PALETTE[i++%PALETTE.length]; return m; }
+
+// ship-grids.json loaded once
+let SHIP_GRIDS = null;
+const ready = fetch('ship-grids.json').then(r=>r.json()).then(d=>{SHIP_GRIDS=d;}).catch(()=>{SHIP_GRIDS=[];});
+function findGridShip(appName){
+  if(!SHIP_GRIDS) return null;
+  const n=(appName||'').toLowerCase();
+  // grid ship name is usually a suffix of the app name (manufacturer stripped)
+  return SHIP_GRIDS.find(s=> n.includes(s.name.toLowerCase())) || null;
+}
+
+let renderer, labelRenderer, scene, camera, controls, bayGroup, host;
+let pieces=[], selected=null, raf=0;
+const ray=new THREE.Raycaster(), mouse=new THREE.Vector2();
+
+function ensureThree(){
+  if(renderer) return;
+  scene=new THREE.Scene(); scene.background=new THREE.Color(0x0a1420);
+  scene.fog=new THREE.Fog(0x0a1420,80,260);
+  camera=new THREE.PerspectiveCamera(50,1,0.1,2000);
+  renderer=new THREE.WebGLRenderer({antialias:true});
+  renderer.setPixelRatio(window.devicePixelRatio);
+  labelRenderer=new CSS2DRenderer();
+  labelRenderer.domElement.style.position='absolute';
+  labelRenderer.domElement.style.top='0'; labelRenderer.domElement.style.left='0';
+  labelRenderer.domElement.style.pointerEvents='none';
+  controls=new OrbitControls(camera,renderer.domElement); controls.enableDamping=true;
+  scene.add(new THREE.AmbientLight(0xffffff,0.55));
+  const k=new THREE.DirectionalLight(0xffffff,1.1);k.position.set(20,40,25);scene.add(k);
+  const rm=new THREE.DirectionalLight(0x4FC3F7,0.4);rm.position.set(-25,12,-20);scene.add(rm);
+  scene.add(new THREE.GridHelper(400,200,0x2a4a6e,0x16283c));
+  bayGroup=new THREE.Group(); scene.add(bayGroup);
+  renderer.domElement.addEventListener('pointerdown',onPick);
+}
+
+function clearBay(){
+  if(!bayGroup) return;
+  bayGroup.traverse(o=>{ if(o.isCSS2DObject&&o.element&&o.element.parentNode)o.element.parentNode.removeChild(o.element); if(o.geometry)o.geometry.dispose(); if(o.material)o.material.dispose(); });
+  scene.remove(bayGroup); bayGroup=new THREE.Group(); scene.add(bayGroup); pieces=[]; selected=null;
+}
+
+function tryPlace(gs,box){
+  const {w:gw,l:gl,h:gh}=gs.g, occ=gs.occ, at=(x,y,z)=>x+gw*(z+gl*y);
+  for(let y=0;y+box.h<=gh;y++) for(let z=0;z<gl;z++) for(let x=0;x<gw;x++) for(const [bw,bd] of [[box.w,box.d],[box.d,box.w]]){
+    if(x+bw>gw||z+bd>gl) continue;
+    let free=true;
+    for(let yy=y;yy<y+box.h&&free;yy++) for(let zz=z;zz<z+bd&&free;zz++) for(let xx=x;xx<x+bw&&free;xx++) if(occ[at(xx,yy,zz)]) free=false;
+    if(!free) continue;
+    let sup=(y===0); if(!sup){sup=true; for(let zz=z;zz<z+bd&&sup;zz++) for(let xx=x;xx<x+bw&&sup;xx++) if(!occ[at(xx,y-1,zz)]) sup=false;}
+    if(!sup) continue;
+    for(let yy=y;yy<y+box.h;yy++) for(let zz=z;zz<z+bd;zz++) for(let xx=x;xx<x+bw;xx++) occ[at(xx,yy,zz)]=1;
+    return {lx:x,ly:y,lz:z,bw,bd};
+  }
+  return null;
+}
+
+function build(deliveries, gridShip){
+  clearBay();
+  const colours=destColours(deliveries);
+  let minX=1e9,maxX=-1e9,minZ=1e9,maxZ=-1e9,maxY=0;
+  gridShip.grids.forEach(g=>{minX=Math.min(minX,g.x);maxX=Math.max(maxX,g.x+g.w);minZ=Math.min(minZ,g.z);maxZ=Math.max(maxZ,g.z+g.l);maxY=Math.max(maxY,g.y+g.h);});
+  const cx=(minX+maxX)/2, cz=(minZ+maxZ)/2;
+  const world=(X,Y,Z)=>[(X-cx)*CS,Y*CS,(Z-cz)*CS];
+  gridShip.grids.forEach(g=>{
+    const [wx,wy,wz]=world(g.x+g.w/2,g.y+g.h/2,g.z+g.l/2);
+    const env=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(g.w*CS,g.h*CS,g.l*CS)),new THREE.LineBasicMaterial({color:0x2a4a6e}));
+    env.position.set(wx,wy,wz); bayGroup.add(env);
+    const pts=[]; const gy=g.y*CS+0.02;
+    for(let i=0;i<=g.w;i++){const [ax,,z0]=world(g.x+i,g.y,g.z);const [,,z1]=world(g.x+i,g.y,g.z+g.l);pts.push(ax,gy,z0,ax,gy,z1);}
+    for(let j=0;j<=g.l;j++){const [x0,,az]=world(g.x,g.y,g.z+j);const [x1]=world(g.x+g.w,g.y,g.z+j);pts.push(x0,gy,az,x1,gy,az);}
+    const gg=new THREE.BufferGeometry(); gg.setAttribute('position',new THREE.Float32BufferAttribute(pts,3));
+    bayGroup.add(new THREE.LineSegments(gg,new THREE.LineBasicMaterial({color:0x305a82})));
+  });
+  const sorted=[...deliveries].sort((a,b)=>b.dropIdx-a.dropIdx);
+  const boxes=[]; sorted.forEach(d=>decompose(d.scu,d.boxScu).forEach(c=>boxes.push({...c,_d:d})));
+  const gridStates=gridShip.grids.map(g=>({g,occ:new Uint8Array(g.w*g.l*g.h)}));
+  let seq=0, overflow=0;
+  boxes.forEach(box=>{
+    let placed=null, gi=-1;
+    for(let k=0;k<gridStates.length;k++){const gs=gridStates[k]; if(gs.g.maxSize&&box.scu>gs.g.maxSize)continue; const p=tryPlace(gs,box); if(p){placed=p;gi=k;break;}}
+    if(!placed){overflow++;return;}
+    seq++; const g=gridShip.grids[gi]; const col=colours[box._d.delivery];
+    const geo=new THREE.BoxGeometry(placed.bw*CS*0.92,box.h*CS*0.92,placed.bd*CS*0.92);
+    const mesh=new THREE.Mesh(geo,new THREE.MeshStandardMaterial({color:col,metalness:0.25,roughness:0.5,transparent:true,opacity:0.95,emissive:0x000000}));
+    const [wx,wy,wz]=world(g.x+placed.lx+placed.bw/2,g.y+placed.ly+box.h/2,g.z+placed.lz+placed.bd/2);
+    mesh.position.set(wx,wy,wz);
+    mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo),new THREE.LineBasicMaterial({color:0x0a1420,transparent:true,opacity:0.6})));
+    mesh.userData={d:box._d,seq,sizeLabel:`${box.scu} SCU (${box.w}×${box.d}×${box.h})`,gridIdx:gi+1};
+    bayGroup.add(mesh); pieces.push({mesh,d:box._d,seq});
+  });
+  // ship name label
+  const span=Math.max((maxX-minX),(maxZ-minZ))*CS;
+  const div=document.createElement('div'); div.className='c3d-label'; div.textContent=gridShip.name;
+  const lobj=new CSS2DObject(div); lobj.position.set(0,maxY*CS+Math.max(1.2,span*0.06),0); bayGroup.add(lobj);
+  frameCamera((maxX-minX)*CS,maxY*CS,(maxZ-minZ)*CS);
+  return {colours, overflow, containers:pieces.length};
+}
+
+function frameCamera(sx,sy,sz){
+  const span=Math.max(sx,sz,sy); const d=span*1.25+6;
+  controls.target.set(0,sy/2,0);
+  camera.position.set(d*0.75,d*0.65+sy/2,d);
+  camera.near=Math.max(0.1,d/500); camera.far=d*12; camera.updateProjectionMatrix();
+  scene.fog.near=d*0.9; scene.fog.far=d*3.5;
+}
+
+function onPick(e){
+  const r=renderer.domElement.getBoundingClientRect();
+  mouse.x=((e.clientX-r.left)/r.width)*2-1; mouse.y=-((e.clientY-r.top)/r.height)*2+1;
+  ray.setFromCamera(mouse,camera);
+  const hits=ray.intersectObjects(pieces.map(p=>p.mesh),false);
+  if(selected) selected.material.emissive.setHex(0x000000);
+  const info=document.getElementById('c3d-info');
+  if(hits.length){ const m=hits[0].object; selected=m; m.material.emissive.setHex(0x2a4a6e); const d=m.userData.d;
+    if(info) info.innerHTML=`<strong>${d.commodity}</strong> · ${m.userData.sizeLabel} · box ${d.boxScu||'?'} SCU · → ${d.delivery} · grid #${m.userData.gridIdx} · pack #${m.userData.seq} · unload #${d.dropIdx+1}`;
+  } else { selected=null; if(info) info.textContent='Click a container for details.'; }
+}
+
+function resize(){
+  if(!host) return; const w=host.clientWidth, h=host.clientHeight||440;
+  renderer.setSize(w,h); labelRenderer.setSize(w,h);
+  camera.aspect=w/h; camera.updateProjectionMatrix();
+}
+function loop(){ raf=requestAnimationFrame(loop); if(controls)controls.update(); if(renderer)renderer.render(scene,camera); if(labelRenderer)labelRenderer.render(scene,camera); }
+
+window.addEventListener('resize',resize);
+
+window.initCargo3D = async function(plan, appShip){
+  await ready;
+  host=document.getElementById('cargo3d'); if(!host) return;
+  const gridShip=findGridShip(appShip.name);
+  const note=document.getElementById('c3d-note');
+  if(!gridShip){ host.innerHTML=`<div class="c3d-msg">No 3D grid data for ${appShip.name}. Showing capacity only.</div>`; if(note)note.textContent=''; return; }
+  ensureThree();
+  // (re)mount canvases into the freshly-rendered host
+  host.innerHTML=''; host.style.position='relative';
+  host.appendChild(renderer.domElement); host.appendChild(labelRenderer.domElement);
+  // compute dropIdx from stops (mirror renderCargoMap)
+  const stops=plan.stops; const clean=s=>(s||'').replace(' (return)','');
+  const fb=maxFittingBox(gridShip);
+  const deliveries=plan.deliveries.map(d=>{
+    const pickupIdx=stops.findIndex(s=>clean(s.station)===d.pickup);
+    const dropIdx=stops.findIndex((s,i)=>i>pickupIdx&&clean(s.station)===d.delivery);
+    return {commodity:d.commodity, scu:d.scu, delivery:d.delivery, pickup:d.pickup, dropIdx:dropIdx<0?0:dropIdx, boxScu:d.box_scu||d.boxScu||fb};
+  });
+  resize();
+  const res=build(deliveries, gridShip);
+  if(note){
+    const load=deliveries.reduce((a,d)=>a+d.scu,0);
+    note.innerHTML=`${gridShip.name} · ${gridShip.capacity} SCU · ${gridShip.grids.length} grid(s) · ${res.containers} containers`
+      + (res.overflow?` · <span style="color:var(--warn)">⚠ ${res.overflow} didn't fit</span>`:'')
+      + (plan.deliveries.some(d=>d.box_scu||d.boxScu)?'':` · <span style="color:var(--text-dim)">box size assumed (${fb} SCU)</span>`);
+  }
+  const step=document.getElementById('c3d-step');
+  if(step){
+    step.max=pieces.length||1; step.value=pieces.length;
+    const lbl=document.getElementById('c3d-step-lbl');
+    const apply=()=>{ const k=+step.value,max=pieces.length; if(lbl)lbl.textContent=(k>=max)?'all':k+'/'+max; pieces.forEach(p=>{const sh=p.seq<=k;p.mesh.visible=sh;p.mesh.children.forEach(c=>c.visible=sh);}); };
+    step.oninput=apply; apply();
+  }
+  if(!raf) loop();
+};
+
+</script>
+
 </head>
 <body>
 
@@ -342,7 +532,7 @@
 
 <script>
 // ========== SHIP DATABASE ==========
-const SHIPS = {
+let SHIPS = {
   'hermes':              { name: 'RSI Hermes',           scu: 288,  grids: 2, gridSize: 144, maxContainer: 32, notes: '2× mirrored 144 SCU grids' },
   'cutlass-black':       { name: 'Drake Cutlass Black',  scu: 46,   grids: 1, maxContainer: 8 },
   'freelancer':          { name: 'MISC Freelancer',      scu: 66,   grids: 1, maxContainer: 16 },
@@ -383,9 +573,26 @@ const API_BASE = ''; // same-origin; worker handles /api/* on this domain
 const CREDITS_ENABLED = true; // Stripe live key + ANTHROPIC_API_KEY are set
 
 // ========== UI SETUP ==========
+async function loadShips() {
+  try {
+    const data = await fetch('ship-grids.json').then(r => r.json());
+    const inGame = data.filter(s => s.grids && s.grids.length && !/\[Concept\]/i.test(s.name))
+                       .sort((a, b) => b.capacity - a.capacity);
+    if (!inGame.length) return;
+    const built = {};
+    for (const s of inGame) {
+      const id = s.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      built[id] = { name: s.name, scu: s.capacity, grids: s.grids.length,
+                    gridSize: Math.round(s.capacity / s.grids.length), maxContainer: 32 };
+    }
+    SHIPS = built;
+  } catch (e) { /* keep fallback SHIPS */ }
+}
+
 async function initUI() {
   logEl = document.getElementById('log');
   planEl = document.getElementById('plan-output');
+  await loadShips();
 
   const shipSel = document.getElementById('ship-select');
   for (const [id, s] of Object.entries(SHIPS)) {
@@ -396,7 +603,9 @@ async function initUI() {
   }
 
   document.getElementById('api-key').value = localStorage.getItem(STORAGE.apiKey) || '';
-  shipSel.value = localStorage.getItem(STORAGE.ship) || 'hermes';
+  const storedShip = localStorage.getItem(STORAGE.ship);
+  shipSel.value = (storedShip && SHIPS[storedShip]) ? storedShip
+    : (Object.keys(SHIPS).find(k => k.includes('hermes')) || (shipSel.options[0] && shipSel.options[0].value) || '');
   document.getElementById('start-station').value = localStorage.getItem(STORAGE.start) || '';
   document.getElementById('return-to-start').checked = localStorage.getItem(STORAGE.returnToStart) === 'true';
 
@@ -706,6 +915,7 @@ async function callClaudeBYOK(apiKey, dataUrl, mediaType) {
     {
       "commodity": "e.g. Tungsten",
       "scu": <integer>,
+      "box_scu": <integer container size if the contract states it (1,2,4,8,16,32), else null>,
       "pickup": "pickup station name (shown in blue text in the contract)",
       "delivery": "delivery station name (also blue)"
     }
@@ -718,6 +928,7 @@ RULES:
 - Read SCU numbers from Primary Objectives: "Deliver 0/X SCU of [commodity] to [station]" → scu=X.
 - If Primary Objectives contains template text like "amount/total SCU of item" or "[item]", the contract is invalid: valid=false, reason="placeholder text".
 - If the image is not a contract screen: valid=false, reason="not a contract screen".
+- box_scu: only if the contract explicitly states the cargo box size (e.g. "delivered in 16 SCU boxes" or "1 SCU containers"); otherwise null.
 - Station names MUST be precise (e.g. "HDPC-Farneseway", "Everus Harbor", "Sakura Sun Magnolia Workcenter").`;
 
   const body = {
@@ -840,6 +1051,7 @@ function buildRoute(contracts, startStation, returnToStart) {
         reward: c.reward_auec,
         commodity: d.commodity,
         scu: d.scu,
+        box_scu: d.box_scu,
         pickup: resolve(d.pickup),
         delivery: resolve(d.delivery),
         id: `c${ci}-d${di}`
@@ -993,10 +1205,20 @@ function renderPlan(plan, ship) {
   html += `</div>`;
 
   // Cargo loading map
-  html += renderCargoMap(plan, ship);
+  html += `<h2>🚛 Cargo Loading (3D)</h2>
+    <div class="cargo-map">
+      <div class="cargo-map-head" id="c3d-note">Loading 3D grid…</div>
+      <div id="cargo3d"></div>
+      <div id="c3d-step-row" style="display:flex;align-items:center;gap:10px;margin-top:10px">
+        <span style="font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px">Loading step</span>
+        <input type="range" id="c3d-step" min="0" max="1" value="1" step="1" style="flex:1">
+        <span id="c3d-step-lbl" style="font-size:12px;color:var(--accent);min-width:52px;text-align:right">all</span>
+      </div>
+      <div id="c3d-info" style="font-size:12px;color:var(--text-dim);margin-top:8px">Click a container for details.</div>
+    </div>`;
 
   // Loading note
-  html += `<div class="info-box"><strong>📦 LIFO loading:</strong> The delivery order below follows LIFO — pack first (at the bottom) what's delivered LAST. Pack last (on top) what's delivered FIRST.${ship.grids > 1 ? ` The ${ship.name} has ${ship.grids} cargo grids — use one for local deliveries and one for return cargo to avoid rearranging mid-trip.` : ''}</div>`;
+  html += `<div class="info-box"><strong>📦 LIFO loading:</strong> The delivery order below follows LIFO — pack first (at the bottom) what's delivered LAST. Pack last (on top) what's delivered FIRST.${ship.grids === 2 ? ` The ${ship.name} has 2 cargo grids — use one for local deliveries and one for return cargo to avoid rearranging mid-trip.` : (ship.grids > 2 ? ` The ${ship.name} has ${ship.grids} cargo bays — load by delivery order so the first drops stay reachable.` : '')}</div>`;
 
   // Step-by-step with checkboxes
   html += `<h2>📍 Step-by-step</h2>`;
@@ -1032,6 +1254,7 @@ function renderPlan(plan, ship) {
   });
 
   planEl.innerHTML = html;
+  if (window.initCargo3D) window.initCargo3D(plan, ship);
 
   // Wire up checkboxes + persistence
   window._plan = plan;

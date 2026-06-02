@@ -18,6 +18,7 @@ const CONTRACT_PROMPT = `You are a Star Citizen contract parser. Read this contr
     {
       "commodity": "e.g. Tungsten",
       "scu": <integer>,
+      "box_scu": <integer container size if the contract states it (1,2,4,8,16,32), else null>,
       "pickup": "pickup station name (shown in blue text in the contract)",
       "delivery": "delivery station name (also blue)"
     }
@@ -30,6 +31,7 @@ RULES:
 - Read SCU numbers from Primary Objectives: "Deliver 0/X SCU of [commodity] to [station]" -> scu=X.
 - If Primary Objectives contains template text like "amount/total SCU of item" or "[item]", the contract is invalid: valid=false, reason="placeholder text".
 - If the image is not a contract screen: valid=false, reason="not a contract screen".
+- box_scu: only if the contract text states the cargo box size (e.g. "containers will be 16 SCU or smaller", "delivered in 1 SCU boxes"); use the largest size mentioned, else null.
 - Station names MUST be precise (e.g. "HDPC-Farneseway", "Everus Harbor", "Sakura Sun Magnolia Workcenter").`;
 
 export default {

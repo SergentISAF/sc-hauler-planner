@@ -13,6 +13,7 @@ mkdir -p "$DIST/app" "$DIST/img"
 sed 's#\.\./index\.html#/app#g' "$ROOT/site/index.html" > "$DIST/index.html"
 cp "$ROOT/site/feedback.html" "$DIST/feedback.html"
 cp "$ROOT/index.html" "$DIST/app/index.html"
+cp "$ROOT/ship-grids.json" "$DIST/app/ship-grids.json"
 cp "$ROOT"/site/img/* "$DIST/img/" 2>/dev/null || true
 
 echo "==> Deploying worker"
