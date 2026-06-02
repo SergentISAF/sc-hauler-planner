@@ -321,10 +321,21 @@
   <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">
     <button id="parse-btn" disabled>🔍 Parse images with Claude</button>
     <button id="generate-btn" class="secondary" disabled>🗺️ Generate transport plan</button>
+    <button id="save-lib-btn" class="secondary" disabled>💾 Save to library</button>
     <button id="clear-btn" class="danger">🗑️ Clear all</button>
   </div>
 
   <div class="log" id="log" style="display:none"></div>
+</div>
+
+<div class="panel" id="library-panel">
+  <h3 style="margin-top:0">📚 Contract library</h3>
+  <p class="hint" id="library-empty">Nothing saved yet. Parse contracts, then click 💾 Save to library to keep them across sessions.</p>
+  <div id="library-list"></div>
+  <div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap" id="library-actions">
+    <button id="lib-add-all-btn" class="secondary">➕ Add all to plan</button>
+    <button id="lib-clear-btn" class="danger">🗑️ Clear library</button>
+  </div>
 </div>
 
 <div id="plan-output"></div>
@@ -365,6 +376,7 @@ const STORAGE = {
   checks: 'sc-tp-checks-v2',
   mode: 'sc-tp-mode',         // 'paid' or 'byok'
   token: 'sc-tp-token',       // paid token from /api/claim
+  library: 'sc-tp-library',   // saved contracts (persistent across sessions)
 };
 
 const API_BASE = ''; // same-origin; worker handles /api/* on this domain
@@ -398,6 +410,10 @@ async function initUI() {
   document.getElementById('parse-btn').addEventListener('click', parseAll);
   document.getElementById('generate-btn').addEventListener('click', generatePlan);
   document.getElementById('clear-btn').addEventListener('click', clearAll);
+  document.getElementById('save-lib-btn').addEventListener('click', saveToLibrary);
+  document.getElementById('lib-add-all-btn').addEventListener('click', addAllLibToPlan);
+  document.getElementById('lib-clear-btn').addEventListener('click', clearLibrary);
+  renderLibrary();
 
   await handleClaimFromUrl();
   refreshModeUI();
@@ -604,6 +620,8 @@ function updateButtons() {
   }
   document.getElementById('parse-btn').disabled = images.length === 0 || !hasAuth;
   document.getElementById('generate-btn').disabled = contracts.length === 0;
+  const saveLib = document.getElementById('save-lib-btn');
+  if (saveLib) saveLib.disabled = contracts.length === 0;
 }
 
 function log(msg, kind='') {
@@ -1208,6 +1226,78 @@ function clearAll() {
   planEl.innerHTML = '';
   logEl.style.display = 'none';
   logEl.innerHTML = '';
+}
+
+// ========== CONTRACT LIBRARY (persistent, localStorage) ==========
+function getLibrary() {
+  try { return JSON.parse(localStorage.getItem(STORAGE.library) || '[]'); } catch { return []; }
+}
+function setLibrary(lib) { localStorage.setItem(STORAGE.library, JSON.stringify(lib)); }
+function libKey(c) {
+  return (c.title || '') + '|' + (c.deliveries || []).map(d => `${d.commodity}:${d.scu}:${d.pickup}>${d.delivery}`).join(',');
+}
+function toContract(item) {
+  return { valid: true, title: item.title, reward_auec: item.reward_auec, contractor: item.contractor, deliveries: item.deliveries };
+}
+function saveToLibrary() {
+  const valid = contracts.filter(c => c && c.valid !== false && (c.deliveries || []).length);
+  if (!valid.length) { alert('Parse some contracts first.'); return; }
+  const lib = getLibrary();
+  const have = new Set(lib.map(libKey));
+  let added = 0;
+  valid.forEach(c => {
+    if (have.has(libKey(c))) return;
+    lib.push({ id: 'lib-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6), savedAt: Date.now(), title: c.title, reward_auec: c.reward_auec, contractor: c.contractor, deliveries: c.deliveries });
+    have.add(libKey(c));
+    added++;
+  });
+  setLibrary(lib);
+  renderLibrary();
+  log(`Saved ${added} new contract(s) to library (${lib.length} total).`, 'ok');
+}
+function addLibToPlan(id) {
+  const item = getLibrary().find(x => x.id === id);
+  if (!item) return;
+  if (new Set(contracts.map(libKey)).has(libKey(item))) { log('Already in current plan.', ''); return; }
+  contracts.push(toContract(item));
+  updateButtons();
+  log(`Added "${item.title || 'contract'}" to current plan.`, 'ok');
+}
+function addAllLibToPlan() {
+  const have = new Set(contracts.map(libKey));
+  let added = 0;
+  getLibrary().forEach(item => {
+    if (have.has(libKey(item))) return;
+    contracts.push(toContract(item)); have.add(libKey(item)); added++;
+  });
+  updateButtons();
+  log(`Added ${added} contract(s) from library to plan.`, 'ok');
+}
+function removeLib(id) { setLibrary(getLibrary().filter(x => x.id !== id)); renderLibrary(); }
+function clearLibrary() {
+  if (!confirm('Clear the whole contract library?')) return;
+  setLibrary([]); renderLibrary();
+}
+function renderLibrary() {
+  const lib = getLibrary();
+  const list = document.getElementById('library-list');
+  document.getElementById('library-empty').style.display = lib.length ? 'none' : '';
+  document.getElementById('library-actions').style.display = lib.length ? 'flex' : 'none';
+  list.innerHTML = '';
+  lib.forEach(item => {
+    const dels = (item.deliveries || []).length;
+    const row = document.createElement('div');
+    row.className = 'contract-row';
+    row.innerHTML = `
+      <span class="contract-name">${item.title || 'contract'} <span style="color:var(--text-dim);font-weight:normal">· ${dels} delivery${dels !== 1 ? 's' : ''} · ${(item.reward_auec || 0).toLocaleString('en-US')} aUEC</span></span>
+      <span>
+        <button class="secondary" data-add="${item.id}" style="padding:5px 10px;font-size:12px">Add</button>
+        <button class="danger" data-del="${item.id}" style="padding:5px 10px;font-size:12px">✕</button>
+      </span>`;
+    list.appendChild(row);
+  });
+  list.querySelectorAll('[data-add]').forEach(b => b.addEventListener('click', () => addLibToPlan(b.dataset.add)));
+  list.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => removeLib(b.dataset.del)));
 }
 
 initUI();
