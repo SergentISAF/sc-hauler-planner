@@ -1096,15 +1096,26 @@ const SYSTEMS = {
       [/\bcalliope\b/, 'Calliope'],
       [/\bclio\b/, 'Clio'],
       [/\beuterpe\b/, 'Euterpe'],
-      // planet-level catch-alls (other HDMS-* stay near Hurston)
-      [/hdms-|hdpc-|everus harbor|lorville|teasa|orinth|\bs1dc|hurston/, 'Hurston'],
-      [/baijini|area\s?18|arccorp|\bs3dc/, 'ArcCorp'],
-      [/port tressler|new babbage|microtech|\bs4dc|rayari/, 'microTech'],
+      // planet-level catch-alls (Lagrange L1-L5 + other stations group with their planet)
+      [/hur-l\d|hdms-|hdpc-|everus harbor|lorville|teasa|orinth|\bs1dc|hurston/, 'Hurston'],
+      [/arc-l\d|baijini|area\s?18|arccorp|\bs3dc/, 'ArcCorp'],
+      [/mic-l\d|port tressler|new babbage|microtech|\bs4dc|rayari/, 'microTech'],
       [/cru-l\d|orison|seraphim|crusader|\bs2dc/, 'Crusader'],
     ],
-    locations: ['Everus Harbor','Baijini Point','Port Tressler','Seraphim Station','CRU-L1','Area18',
-      'New Babbage','Lorville','Teasa Spaceport','Orison','Grim HEX','HDMS-Oparei','HDMS-Hadley',
-      'HDMS-Edmond','HDMS-Anderson','HDMS-Bezdek','HDMS-Ryder','HDMS-Hahn','HDPC-Cassillo','HDPC-Farnesway'],
+    locations: [
+      // orbital stations & cities
+      'Everus Harbor','Baijini Point','Port Tressler','Seraphim Station','Grim HEX',
+      'Area18','New Babbage','Lorville','Orison','Teasa Spaceport',
+      // Lagrange point stations L1-L5
+      'HUR-L1','HUR-L2','HUR-L3','HUR-L4','HUR-L5',
+      'CRU-L1','CRU-L2','CRU-L3','CRU-L4','CRU-L5',
+      'ARC-L1','ARC-L2','ARC-L3','ARC-L4','ARC-L5',
+      'MIC-L1','MIC-L2','MIC-L3','MIC-L4','MIC-L5',
+      // Hurston stations
+      'HDMS-Oparei','HDMS-Hadley','HDMS-Edmond','HDMS-Stanhope','HDMS-Pinewood','HDMS-Thedus',
+      'HDMS-Anderson','HDMS-Norgaard','HDMS-Bezdek','HDMS-Lathan','HDMS-Ryder','HDMS-Woodruff','HDMS-Hahn','HDMS-Perlman',
+      'HDPC-Cassillo','HDPC-Farnesway','Reclamation & Disposal Orinth','Covalex Distribution Center S1DC06',
+    ],
   },
   pyro: {
     label: 'Pyro',
