@@ -609,6 +609,7 @@ async function initUI() {
   logEl = document.getElementById('log');
   planEl = document.getElementById('plan-output');
   await loadShips();
+  try { LOCDATA = await fetch('loc-map.json').then(r => r.json()); } catch (e) { /* keep SYSTEMS fallback */ }
 
   const shipSel = document.getElementById('ship-select');
   for (const [id, s] of Object.entries(SHIPS)) {
@@ -1124,9 +1125,10 @@ const SYSTEMS = {
     bodies: { Star:[0,0], 'Pyro I':[5,0], Monox:[-7,6], Bloom:[10,-9], 'Pyro IV':[-15,-12],
       'Pyro V':[24,18], 'Pyro VI':[-30,28], Starlight:[16,-2] },
     rules: [
-      [/ruin station|terminus|pyro vi|pyro 6/, 'Pyro VI'],
-      [/checkmate|orbituary|patch city|rod'?s|gaslight|rustville|dudley|bueno|sacren|chawla|last landing|rappel|pyro v\b|pyro 5|ignis|adir|fairo|fuego|vatra|vuur/, 'Pyro V'],
-      [/starlight/, 'Starlight'],
+      [/ruin station|terminus|pyro vi|pyro 6/, 'Terminus'],
+      [/checkmate|orbituary|patch city|rod'?s|gaslight|rustville|dudley|sacren|last landing|rappel|pyro v\b|pyro 5/, 'Pyro V'],
+      [/\bignis\b/, 'Ignis'], [/\badir\b/, 'Adir'], [/\bfairo\b/, 'Fairo'], [/\bfuego\b/, 'Fuego'], [/\bvatra\b/, 'Vatra'], [/\bvuur\b/, 'Vuur'],
+      [/bueno|\bbloom\b/, 'Bloom'], [/chawla|starlight/, 'Pyro IV'], [/\bmonox\b/, 'Monox'],
       [/monox|pyro ii\b|pyro 2/, 'Monox'],
       [/bloom|pyro iii|pyro 3/, 'Bloom'],
       [/pyro iv|pyro 4/, 'Pyro IV'],
@@ -1139,17 +1141,32 @@ const SYSTEMS = {
 function locDist(a,b){ const dx=a[0]-b[0], dy=a[1]-b[1]; return Math.sqrt(dx*dx+dy*dy); }
 function locJitter(name){ let h=0; for(let i=0;i<name.length;i++) h=(h*31+name.charCodeAt(i))>>>0;
   return [((h%100)/100-0.5)*0.6, (((h>>7)%100)/100-0.5)*0.6]; }
-function locateStation(name, sys){
-  sys = sys || SYSTEMS.stanton; const B = sys.bodies; const n = (name||'').toLowerCase();
+// Data-driven location map (CIG star map body coords + starmap.space POI->body), loaded at startup.
+let LOCDATA = null;
+function locNorm(s){ s=(s||'').toLowerCase();
+  for (const sep of [' on ',' in ',' above ',' at ',' near ']){ const i=s.indexOf(sep); if (i>=0) s=s.slice(0,i); }
+  return s.replace(/[^a-z0-9]/g,''); }
+function locateStation(name, sys, systemKey){
+  systemKey = systemKey || 'stanton';
+  const ld = LOCDATA && LOCDATA[systemKey];
+  const j = locJitter(name||'');
+  // 1) exact POI -> body from the data map (most accurate)
+  if (ld) {
+    const body = ld.poi[locNorm(name)];
+    if (body && ld.bodies[body]) { const b=ld.bodies[body]; return { body, pos:[b[0]+j[0], b[1]+j[1]] }; }
+  }
+  // 2) regex-rule fallback; use data-map body coords if loaded
+  sys = sys || SYSTEMS.stanton;
+  const B = (ld && ld.bodies) || sys.bodies; const n = (name||'').toLowerCase();
   let body = 'Star';
   for (const [re, b] of (sys.rules || [])) { if (re.test(n)) { body = b; break; } }
-  const base = B[body] || B.Star; const j = locJitter(name||'');
+  const base = B[body] || B.Star || [0,0];
   return { body, pos:[base[0]+j[0], base[1]+j[1]] };
 }
 // Nearest-neighbour ordering from the start, respecting pickup-before-delivery.
 function orderByDistance(remaining, stationRoles, fromStation, visitedSet, system){
   const sys = SYSTEMS[system] || SYSTEMS.stanton;
-  const posCache = {}; const posOf = s => (posCache[s] || (posCache[s] = locateStation(s, sys).pos));
+  const posCache = {}; const posOf = s => (posCache[s] || (posCache[s] = locateStation(s, sys, system).pos));
   const visited = new Set(visitedSet); const order = []; const left = remaining.slice();
   let cur = fromStation || left[0];
   const ready = s => { const r = stationRoles[s] || {pickups:[],drops:[]};
@@ -1248,7 +1265,7 @@ function buildRoute(contracts, startStation, returnToStart, opts = {}) {
   // positions for estimated travel distance (Gm)
   const distSys = SYSTEMS[opts.system] || SYSTEMS.stanton;
   const posCache = {};
-  const posOf = name => (posCache[name] || (posCache[name] = locateStation(name.replace(' (return)', ''), distSys).pos));
+  const posOf = name => (posCache[name] || (posCache[name] = locateStation(name.replace(' (return)', ''), distSys, opts.system).pos));
 
   route.forEach((stationName, idx) => {
     const realStation = stationName.replace(' (return)', '');
