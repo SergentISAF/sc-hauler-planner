@@ -742,9 +742,20 @@ async function refreshCreditsDisplay(token) {
   }
 }
 
+// Parse a worker JSON response, but fail gracefully if we got an HTML block
+// page (Cloudflare rate-limit / challenge) instead of JSON.
+async function apiJson(r) {
+  const ct = r.headers.get('content-type') || '';
+  if (!ct.includes('application/json')) {
+    if (r.status === 429 || r.status === 403) throw new Error('too many requests right now, wait a minute and try again');
+    throw new Error(`service unavailable (HTTP ${r.status}), try again shortly`);
+  }
+  return r.json();
+}
+
 async function fetchCredits(token) {
   const r = await fetch(`${API_BASE}/api/credits?token=${encodeURIComponent(token)}`);
-  const j = await r.json();
+  const j = await apiJson(r);
   if (!r.ok) throw new Error(j.error || 'failed');
   return j.credits;
 }
@@ -756,7 +767,7 @@ async function startCheckout(pack) {
   }
   try {
     const r = await fetch(`${API_BASE}/api/buy`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pack: pack === 'small' ? 'small' : 'large' }) });
-    const j = await r.json();
+    const j = await apiJson(r);
     if (!r.ok) throw new Error(j.error || 'failed');
     window.location.href = j.url;
   } catch (e) {
@@ -770,7 +781,7 @@ async function handleClaimFromUrl() {
   if (!sid) return;
   try {
     const r = await fetch(`${API_BASE}/api/claim?session_id=${encodeURIComponent(sid)}`);
-    const j = await r.json();
+    const j = await apiJson(r);
     if (!r.ok) throw new Error(j.error || 'claim failed');
     localStorage.setItem(STORAGE.token, j.token);
     localStorage.setItem(STORAGE.mode, 'paid');
@@ -925,7 +936,7 @@ async function callClaudeViaProxy(token, dataUrl, mediaType) {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ token, image: base64, mediaType })
   });
-  const j = await r.json();
+  const j = await apiJson(r);
   if (!r.ok) throw new Error(j.error || `proxy ${r.status}`);
   return j.parsed;
 }
