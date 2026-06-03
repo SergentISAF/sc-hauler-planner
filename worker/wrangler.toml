@@ -10,7 +10,8 @@ kv_namespaces = [
 
 # Custom domain routing — Worker handles all /api/* paths on the domain.
 routes = [
-  { pattern = "scrapwavesurvivors.com/api/*", zone_name = "scrapwavesurvivors.com" }
+  { pattern = "scrapwavesurvivors.com/api/*", zone_name = "scrapwavesurvivors.com" },
+  { pattern = "www.scrapwavesurvivors.com/api/*", zone_name = "scrapwavesurvivors.com" }
 ]
 
 # Secrets — set via wrangler secret put <NAME>:
