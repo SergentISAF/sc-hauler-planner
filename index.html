@@ -244,7 +244,10 @@ const CS = 0.72;
 
 function decompose(total, boxScu) { const cap=boxScu||1; const o=[]; let r=total; for(const s of [32,16,8,4,2,1]){ if(s>cap) continue; while(r>=s){ o.push({...(CONTAINER_DIMS[s]||CONTAINER_DIMS[1]),scu:s}); r-=s; } } return o; }
 function maxFittingBox(ship){ for(const S of [32,16,8,4,2,1]){const b=CONTAINER_DIMS[S]; if(ship.grids.some(g=>(!g.maxSize||S<=g.maxSize)&&b.h<=g.h&&((b.w<=g.w&&b.d<=g.l)||(b.d<=g.w&&b.w<=g.l))))return S;} return 1; }
-function destColours(ds){ const m={};let i=0; for(const d of ds) if(!(d.delivery in m)) m[d.delivery]=PALETTE[i++%PALETTE.length]; return m; }
+// Colour by contract so every box from the same contract shares one colour.
+function contractColours(ds){ const m={};let i=0; for(const d of ds){ const k=d.contractIdx; if(!(k in m)) m[k]=PALETTE[i++%PALETTE.length]; } return m; }
+// Human label for a contract key (uses the contract title when it isn't the generic fallback).
+function contractLabel(d){ const n=d.contractIdx+1; const t=d.contractTitle; return (t && !/^contract\s/i.test(t)) ? `C${n} · ${t}` : `Contract ${n}`; }
 
 // ship-grids.json loaded once
 let SHIP_GRIDS = null;
@@ -303,7 +306,8 @@ function tryPlace(gs,box){
 
 function build(deliveries, gridShip){
   clearBay();
-  const colours=destColours(deliveries);
+  const colours=contractColours(deliveries);
+  const labels={}; deliveries.forEach(d=>{ if(!(d.contractIdx in labels)) labels[d.contractIdx]=contractLabel(d); });
   let minX=1e9,maxX=-1e9,minZ=1e9,maxZ=-1e9,maxY=0;
   gridShip.grids.forEach(g=>{minX=Math.min(minX,g.x);maxX=Math.max(maxX,g.x+g.w);minZ=Math.min(minZ,g.z);maxZ=Math.max(maxZ,g.z+g.l);maxY=Math.max(maxY,g.y+g.h);});
   const cx=(minX+maxX)/2, cz=(minZ+maxZ)/2;
@@ -326,7 +330,7 @@ function build(deliveries, gridShip){
     let placed=null, gi=-1;
     for(let k=0;k<gridStates.length;k++){const gs=gridStates[k]; if(gs.g.maxSize&&box.scu>gs.g.maxSize)continue; const p=tryPlace(gs,box); if(p){placed=p;gi=k;break;}}
     if(!placed){overflow++;return;}
-    seq++; const g=gridShip.grids[gi]; const col=colours[box._d.delivery];
+    seq++; const g=gridShip.grids[gi]; const col=colours[box._d.contractIdx];
     const geo=new THREE.BoxGeometry(placed.bw*CS*0.92,box.h*CS*0.92,placed.bd*CS*0.92);
     const mesh=new THREE.Mesh(geo,new THREE.MeshStandardMaterial({color:col,metalness:0.25,roughness:0.5,transparent:true,opacity:0.95,emissive:0x000000}));
     const [wx,wy,wz]=world(g.x+placed.lx+placed.bw/2,g.y+placed.ly+box.h/2,g.z+placed.lz+placed.bd/2);
@@ -340,7 +344,7 @@ function build(deliveries, gridShip){
   const div=document.createElement('div'); div.className='c3d-label'; div.textContent=gridShip.name;
   const lobj=new CSS2DObject(div); lobj.position.set(0,maxY*CS+Math.max(1.2,span*0.06),0); bayGroup.add(lobj);
   frameCamera((maxX-minX)*CS,maxY*CS,(maxZ-minZ)*CS);
-  return {colours, overflow, containers:pieces.length};
+  return {colours, labels, overflow, containers:pieces.length};
 }
 
 function frameCamera(sx,sy,sz){
@@ -359,7 +363,7 @@ function onPick(e){
   if(selected) selected.material.emissive.setHex(0x000000);
   const info=document.getElementById('c3d-info');
   if(hits.length){ const m=hits[0].object; selected=m; m.material.emissive.setHex(0x2a4a6e); const d=m.userData.d;
-    if(info) info.innerHTML=`<strong>${d.commodity}</strong> · ${m.userData.sizeLabel} · box ${d.boxScu||'?'} SCU · → ${d.delivery} · grid #${m.userData.gridIdx} · pack #${m.userData.seq} · unload #${d.dropIdx+1}`;
+    if(info) info.innerHTML=`<strong>${contractLabel(d)}</strong> · ${d.commodity} · ${m.userData.sizeLabel} · box ${d.boxScu||'?'} SCU · <strong style="color:var(--warn)">→ ${d.delivery}</strong> · grid #${m.userData.gridIdx} · pack #${m.userData.seq} · unload #${d.dropIdx+1}`;
   } else { selected=null; if(info) info.textContent='Click a container for details.'; }
 }
 
@@ -388,7 +392,7 @@ window.initCargo3D = async function(plan, appShip){
   const deliveries=plan.deliveries.map(d=>{
     const pickupIdx=stops.findIndex(s=>clean(s.station)===d.pickup);
     const dropIdx=stops.findIndex((s,i)=>i>pickupIdx&&clean(s.station)===d.delivery);
-    return {commodity:d.commodity, scu:d.scu, delivery:d.delivery, pickup:d.pickup, dropIdx:dropIdx<0?0:dropIdx, boxScu:d.box_scu||d.boxScu||fb};
+    return {commodity:d.commodity, scu:d.scu, delivery:d.delivery, pickup:d.pickup, contractIdx:d.contractIdx, contractTitle:d.contractTitle, dropIdx:dropIdx<0?0:dropIdx, boxScu:d.box_scu||d.boxScu||fb};
   });
   resize();
   const res=build(deliveries, gridShip);
@@ -399,7 +403,7 @@ window.initCargo3D = async function(plan, appShip){
       + (plan.deliveries.some(d=>d.box_scu||d.boxScu)?'':` · <span style="color:var(--text-dim)">box size assumed (${fb} SCU)</span>`);
   }
   const leg=document.getElementById('c3d-legend');
-  if(leg){ leg.innerHTML=Object.entries(res.colours||{}).map(([dest,c])=>`<span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--text-dim)"><span style="width:13px;height:13px;border-radius:3px;flex:none;background:#${c.toString(16).padStart(6,'0')}"></span>${dest}</span>`).join(''); }
+  if(leg){ leg.innerHTML=Object.entries(res.colours||{}).map(([key,c])=>`<span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--text-dim)"><span style="width:13px;height:13px;border-radius:3px;flex:none;background:#${c.toString(16).padStart(6,'0')}"></span>${(res.labels&&res.labels[key])||('Contract '+(Number(key)+1))}</span>`).join(''); }
   const step=document.getElementById('c3d-step');
   if(step){
     step.max=pieces.length||1; step.value=pieces.length;
@@ -1262,6 +1266,29 @@ function buildRoute(contracts, startStation, returnToStart, opts = {}) {
     });
     remaining.forEach(s => { route.push(s); visited.add(s); });
   }
+
+  // Revisit destinations whose cargo is picked up AFTER the destination's only visit.
+  // Without this, a station that is both an early pickup-source and a later delivery-target
+  // (e.g. Lorville: pick up fuel there, then haul ore back to it) never gets the drop, so the
+  // contract can never complete. Scan every delivery; if its destination never appears after
+  // its pickup, insert a return-visit right after the latest pickup that feeds it.
+  const revisitFor = {}; // station -> latest pickup-index feeding an orphaned drop
+  deliveries.forEach(d => {
+    const pickupIdx = route.indexOf(d.pickup);
+    let delivered = false;
+    for (let j = 0; j < route.length; j++) {
+      if (route[j] === d.delivery && j > pickupIdx) { delivered = true; break; }
+    }
+    if (delivered) return;
+    if (returnToStart && d.delivery === canonicalStart) return; // return-to-start already covers it
+    revisitFor[d.delivery] = Math.max(revisitFor[d.delivery] ?? -1, pickupIdx);
+  });
+  // Descending order so earlier splices don't shift the indices of later insertion points.
+  Object.entries(revisitFor)
+    .sort((a, b) => b[1] - a[1])
+    .forEach(([station, afterIdx]) => {
+      route.splice(afterIdx + 1, 0, station + ' (return)');
+    });
 
   // Optional return to start
   if (returnToStart && canonicalStart && route[route.length - 1] !== canonicalStart) {
